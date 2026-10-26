@@ -319,26 +319,35 @@
 
 
   /* ---------------- Hero bill estimate (live while typing) ---------------- */
-  // Same sizing as the calculator's bill mode: about 1 kW per Rs 761.6 of monthly bill.
+  // Same model as the calculator: Kerala, on-grid, no battery, residential.
   function initQuickEstimate() {
     var input = document.getElementById('quickBill');
     var out = document.getElementById('quickOut');
     if (!input || !out) return;
-    var MAX = 200000, PER_KW = 761.6;
+    var MAX = 200000;
     var idle = out.innerHTML;
     function inr(n) { return Math.round(n).toLocaleString('en-IN'); }
     function update() {
       var bill = parseFloat(input.value);
       var wrap = input.closest('.hero-quick');
       if (wrap) wrap.classList.toggle('has-value', bill > 0);
-      if (!(bill > 0)) { out.innerHTML = idle; return; }
-      var capped = Math.min(bill, MAX);
-      var kw = Math.max(1, Math.round(capped / PER_KW * 10) / 10);
-      var panels = Math.ceil(kw / 0.55);
-      // PM Surya Ghar: Rs 30,000 per kW for the first 2 kW, Rs 18,000 per kW for the next 1 kW, Rs 78,000 at most
-      var sub = Math.round(Math.min(78000, 30000 * Math.min(kw, 2) + 18000 * Math.max(0, Math.min(kw, 3) - 2)));
-      out.innerHTML = 'Your home needs about <b>' + kw + ' kW</b> · ' + panels + ' panels · subsidy up to ₹' + inr(sub) +
-        (bill > MAX ? ' <span>(bills above ₹2,00,000 are sized at ₹2,00,000)</span>' : '');
+      if (!(bill > 0) || !window.SolarModel) { out.innerHTML = idle; return; }
+      var est = window.SolarModel.estimate({
+        monthlyBill: Math.min(bill, MAX),
+        unitsAreMeasured: false,
+        residential: true,
+        payment: 'cash'
+      });
+      if (!est.ok) { out.innerHTML = idle; return; }
+      var subsidy = est.subsidy && est.subsidy.eligible
+        ? ' · potential subsidy ₹' + inr(est.subsidy.amountInr) + ' if eligible'
+        : '';
+      var visit = est.siteAssessment ? ' · site assessment recommended' : '';
+      var cap = bill > MAX ? ' <span>(bills above ₹2,00,000 are sized at ₹2,00,000)</span>' : '';
+      var size = String(est.capacityLabel).indexOf('kWp') === -1
+        ? est.capacityLabel + ' · ' + est.dcKwp.toFixed(2) + ' kWp'
+        : est.capacityLabel;
+      out.innerHTML = 'Your home may need about <b>' + size + '</b> · ' + est.panelCount + ' panels' + subsidy + visit + cap;
     }
     input.addEventListener('input', update);
   }

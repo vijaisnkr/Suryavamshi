@@ -34,20 +34,198 @@ const SOORYAVAMSHI_CONFIG = {
     { id: "experience", value: 8, suffix: "+ Years", label: "Engineering Experience", note: "Certified solar technicians" }
   ],
 
-  // Solar Calculator baseline engineering parameters
+  // Solar calculator assumptions. Every figure the calculator can change lives here,
+  // with the page it was read from and the date it was checked. Kerala only.
+  // The default system is grid-connected and net-metered, without a battery.
   calculator: {
-    baseDailySunHours: 4.3, // Average Indian peak sun hours (kWh/m2/day)
-    systemPerformanceRatio: 0.82, // Standard derating factor accounting for temperature & dust
-    standardPanelWattage: 550, // Modern Tier-1 Mono PERC / Bi-facial panel wattage
-    spaceRequiredPerKwSqFt: 100, // Standard shadow-free rooftop requirement in sq.ft
-    averageTariffPerUnitInr: 7.2, // KSEB residential slab average (Rs/kWh)
-    co2OffsetPerKwhKg: 0.82, // Average grid carbon intensity reduction (kg CO2 per kWh)
-    
-    // Regional insolation adjustment factors. We install in Kerala only,
-    // so the calculator's region menu lists Kerala only.
+    region: "Kerala",
+    discom: "KSEB",
+    defaultSystem: "grid-connected net-metered rooftop solar without battery",
+    // Kept so older call sites still resolve. The bill is no longer units × this rate.
+    baseDailySunHours: 5,
+    systemPerformanceRatio: 1,
+    standardPanelWattage: 550,
+    spaceRequiredPerKwSqFt: 100,
+    averageTariffPerUnitInr: null,
+    co2OffsetPerKwhKg: 0.82,
     states: [
-      { name: "Kerala", factor: 1.00, defaultTariff: 7.2 }
-    ]
+      { name: "Kerala", factor: 1, defaultTariff: null }
+    ],
+
+    assumptions: {
+      checkedOn: "2026-10-26",
+      // Stale-rate warning if a loan or tariff date is older than this when the page runs.
+      staleAfterDays: 120,
+
+      yield: {
+        min: 4,
+        max: 6,
+        default: 5,
+        unit: "kWh/kWp/day",
+        label: "Estimated specific yield for a Kerala rooftop. A planning figure, not a site measurement.",
+        sourceUrl: "https://ekiran.kseb.in/",
+        lastVerified: "2026-10-26"
+      },
+
+      calendarYear: 2026,
+      displayMonthDays: 30,
+
+      usagePatterns: {
+        day: { id: "day", label: "Mostly daytime", daytimeFraction: 0.70 },
+        mixed: { id: "mixed", label: "Mixed", daytimeFraction: 0.45 },
+        night: { id: "night", label: "Mostly evening and night", daytimeFraction: 0.25 }
+      },
+      defaultUsagePattern: "mixed",
+
+      // Sales sizing. Preliminary, not an engineering design.
+      sales: {
+        bill3KwMaxInr: 3800,
+        bill5KwMaxInr: 6000,
+        package3Kw: 3,
+        package5Kw: 5
+      },
+
+      panelWattage: 550,
+      spaceSqFtPerKw: 100,
+      domesticNetMeterMinKw: 1,
+      domesticNetMeterMaxKw: 20,
+      storageNoteAboveKw: 10,
+      singlePhaseUpToKw: 5,
+
+      indicativeCostPerKw: 70000,
+      costSourceUrl: "https://centralbank.bank.in/en/Roof-Top-Solar-Loan-Scheme",
+      costLastVerified: "2026-10-26",
+      costNote: "Central Bank states a project-cost assumption of about Rs 70,000 per kW. This is not a Suryavamshi quotation.",
+
+      // PM Surya Ghar CFA, residential, checked 26 Oct 2026.
+      // 1 kW → 30000, 2 kW → 60000, 3 kW and above → 78000. Partial kW is pro-rata.
+      subsidy: {
+        sourceUrl: "https://pmsuryaghar.gov.in/",
+        guidelinesUrl: "https://mnre.gov.in/en/notice/operational-guidelines-for-implementation-of-the-component-central-financial-assistance-to-residential-consumers-of-pm-surya-ghar-muft-bijli-yojana/",
+        cfaPdfUrl: "https://cdnbbsr.s3waas.gov.in/s303412aef4dcdee4f934f7bf599f89783/uploads/2026/10/202610011688339072.pdf",
+        lastVerified: "2026-10-26",
+        effectiveFrom: "2024-02-13",
+        residentialOnly: true,
+        firstBandKw: 2,
+        firstBandInrPerKw: 30000,
+        secondBandKw: 3,
+        secondBandInrPerKw: 18000,
+        capInr: 78000,
+        vendorMustBeRegistered: true,
+        paidAfterCommissioning: true,
+        portalUrl: "https://pmsuryaghar.gov.in/"
+      },
+
+      // LT-I domestic, w.e.f. 1 Apr 2025 to 31 Mar 2027.
+      // Energy charge above 500 units is Rs 9.20. A republished copy prints Rs 8.20,
+      // which is below the 0–500 slab (Rs 8.25) and is treated here as a misprint.
+      // Electricity duty is excluded: the schedule says duty is extra, and the duty
+      // rate was not verified for this calculator.
+      tariff: {
+        sourceUrl: "https://peak-files.estonetech.in/peak-data-files_duplicate/TOC/TOC_Kerala%20State%20Electricity%20Board%20Retail%20Supply%20Tariff%20Order%202025-26.pdf",
+        orderUrl: "https://dev.erckerala.org/api/storage/orders/DHbrNDrCvxmdGffDdSjHklbBvcbgp7RRxXEdQPSl.pdf",
+        lastVerified: "2026-10-26",
+        effectiveFrom: "2025-04-01",
+        effectiveTo: "2027-03-31",
+        category: "LT-I Domestic",
+        dutyIncluded: false,
+        above500EnergyConflict: "Gazette schedule used here: Rs 9.20. One republished copy prints Rs 8.20.",
+        billingCycleNote: "KSERC (5 Dec 2024, OP 18/2023) kept bimonthly billing for consumers below 20 kW. Solar does not switch a home to monthly billing.",
+        billingCycleSourceUrl: "https://dev.erckerala.org/api/storage/orders/DHbrNDrCvxmdGffDdSjHklbBvcbgp7RRxXEdQPSl.pdf",
+        // upTo is monthly units. Telescopic slabs are cumulative; later slabs bill every unit at one rate.
+        slabs: [
+          { upTo: 50, energy: 3.35, fixedSingle: 50, fixedThree: 130, telescopic: true, label: "0–50" },
+          { upTo: 100, energy: 4.25, fixedSingle: 85, fixedThree: 175, telescopic: true, label: "51–100" },
+          { upTo: 150, energy: 5.35, fixedSingle: 105, fixedThree: 205, telescopic: true, label: "101–150" },
+          { upTo: 200, energy: 7.20, fixedSingle: 140, fixedThree: 215, telescopic: true, label: "151–200" },
+          { upTo: 250, energy: 8.50, fixedSingle: 160, fixedThree: 235, telescopic: true, label: "201–250" },
+          { upTo: 300, energy: 6.75, fixedSingle: 220, fixedThree: 240, telescopic: false, label: "0–300" },
+          { upTo: 350, energy: 7.60, fixedSingle: 240, fixedThree: 250, telescopic: false, label: "0–350" },
+          { upTo: 400, energy: 7.95, fixedSingle: 260, fixedThree: 260, telescopic: false, label: "0–400" },
+          { upTo: 500, energy: 8.25, fixedSingle: 285, fixedThree: 285, telescopic: false, label: "0–500" },
+          { upTo: 1000000, energy: 9.20, fixedSingle: 310, fixedThree: 310, telescopic: false, label: "Above 500" }
+        ]
+      },
+
+      // KSERC (Renewable Energy and Related Matters) Regulations, 2025.
+      // Notification 5 Nov 2025, Gazette No. 3944 dated 6 Nov 2025.
+      // Energy accounting in force from 1 Jan 2026.
+      netMetering: {
+        sourceUrl: "https://dev.erckerala.org/api/storage/final-regulations/BDm5OZBLIuAbHoyTX0xoploDz82DbFy1O6klxxfS.pdf",
+        regulationsName: "KSERC (Renewable Energy and Related Matters) Regulations, 2025",
+        lastVerified: "2026-10-26",
+        accountingFrom: "2026-01-01",
+        domesticMinKw: 1,
+        domesticMaxKw: 20,
+        connectedLoadCap: true,
+        solarExportFactorDomestic: 1,
+        offPeakTakebackDomestic: 0.85,
+        peakTakebackDomestic: 0.75,
+        factorIsOneUpToKw: 2,
+        monthlyBankingCharge: 0.02,
+        newProsumerSolarFitInr: 2.79,
+        existingProsumerFitInr: 3.08,
+        fitSourceRegulation: "Regulation 28.6",
+        gridSupportExemptUpToKw: 10,
+        gridSupportFirstUnits: 300,
+        gridSupportFirstInr: 0.5,
+        gridSupportRestInr: 1,
+        faqUrl: "https://ekiran.kseb.in/public/faqs",
+        policyUrl: "https://ekiran.kseb.in/public/policy_regulation"
+      },
+
+      loans: {
+        sbi: {
+          id: "sbi",
+          name: "SBI Surya Ghar",
+          sourceUrl: "https://sbi.bank.in/web/personal-banking/loans/pm-surya-ghar-loan-for-solar-roof-top",
+          lastVerified: "2026-10-26",
+          pageUpdated: "2026-10-19",
+          rateEffective: "2026-10-15",
+          floating: true,
+          minAmountInr: 0,
+          maxAmountInr: 600000,
+          noMinimumAmount: true,
+          marginPercent: 10,
+          processingFeeInr: 0,
+          defaultMoratoriumMonths: 6,
+          maxTenureMonths: 120,
+          tenureIncludesMoratorium: true,
+          applyUrl: "https://www.jansamarth.in",
+          registerUrl: "https://pmsuryaghar.gov.in/",
+          slabs: [
+            { maxInr: 200000, annualRatePercent: 6.00, formula: "EBLR − 2.15%" },
+            { maxInr: 600000, annualRatePercent: 8.15, formula: "EBLR + 0%" }
+          ],
+          note: "Features table on 26 Oct 2026: 6.00% up to Rs 2 lakh and 8.15% above that, both floating, with effect from 15 Oct 2026. The FAQ on the same page still quotes 5.75% and 7.90% as on 15 Dec 2025. The calculator uses the features table. The bank decides the sanction."
+        },
+        central: {
+          id: "central",
+          name: "Central Bank of India PM Surya Ghar",
+          sourceUrl: "https://centralbank.bank.in/en/PM_Surya_Ghar",
+          schemeUrl: "https://centralbank.bank.in/en/Roof-Top-Solar-Loan-Scheme",
+          ratesUrl: "https://centralbank.bank.in/en/retail-scheme-interest",
+          lastVerified: "2026-10-26",
+          ratesPageUpdated: "2026-05-19",
+          floating: true,
+          minAmountInr: null,
+          maxAmountInr: 600000,
+          processingFeeInr: 0,
+          otherChargesNote: "The scheme page lists CIC charges of Rs 50 + GST and API charges of Rs 81 + GST. They are not part of the EMI.",
+          defaultMoratoriumMonths: 6,
+          moratoriumMinMonths: 3,
+          moratoriumMaxMonths: 6,
+          maxTenureMonths: 120,
+          tenureIncludesMoratorium: true,
+          applyUrl: "https://centralbank.bank.in/en/PM_Surya_Ghar",
+          slabs: [
+            { maxInr: 200000, annualRatePercent: 5.75, marginPercent: 10, formula: "Repo + 0.50% (repo stated as 5.25% on the scheme page)" },
+            { maxInr: 600000, annualRatePercent: null, marginPercent: 20, rateMin: 8.20, rateMax: 9.75, formula: "Non-home-loan band 8.20% to 9.75%. Home-loan borrowers 7.20% to 8.75% (retail rates page, last updated 19 May 2026)." }
+          ],
+          note: "Up to Rs 2 lakh, the scheme page on 26 Oct 2026 states 5.75% (repo 5.25% + 0.50%). Above Rs 2 lakh the bank publishes a range, not one rate, and the retail-rates page was last updated on 19 May 2026. No rate is filled in for that band until you type one. The bank decides the sanction."
+        }
+      }
+    }
   },
 
   // Products & Equipment data

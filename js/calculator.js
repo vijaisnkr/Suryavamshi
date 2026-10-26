@@ -1,43 +1,41 @@
 /**
- * Suryavamshi Solar Projects LLP - Solar Requirement Calculator
- * Cleanly separated calculation engine and reactive DOM controller.
+ * Suryavamshi Solar Projects LLP — calculator page controller.
+ * Numbers come from SolarModel (js/solar-model.js) and SOORYAVAMSHI_CONFIG.
+ * This file only reads the form, draws the result, and carries the estimate
+ * to the site-assessment form and WhatsApp.
  *
- * v6: the typed value always drives the result (units or bill) and the
- * typed bill can go up to Rs 2,00,000 a month.
- * v7: the slider covers everyday bills only (up to Rs 10,000 a month, or the
- * same amount in units) on a straight scale. A typed value above that is
- * still used in full; the slider just rests at its right end.
- * v8: the estimate travels with the visitor. Every booking link on the page
- * carries it (and opens the form on this page, prefilled), the result can be
- * sent on WhatsApp, savings never exceed 90% of the bill (fixed charges and
- * meter rent stay), and Bill <-> Units switching keeps the typed bill.
+ * Default case: Kerala, KSEB, grid-connected net metering, no battery.
  */
-
-window.SolarCalculator = (function() {
-  const MAX_BILL = 200000;   // Rs per month, top of the typed range
-  const SLIDER_MAX_BILL = 10000; // Rs per month, right end of the slider
-  const MIN_UNITS = 50;      // left end of the slider
-  const SLIDER_STEPS = 1000; // slider resolution (positions, not units)
+window.SolarCalculator = (function () {
+  const MAX_BILL = 200000;
+  const SLIDER_MAX_BILL = 10000;
+  const MIN_BILL = 200;
+  const MAX_UNITS = 25000;
+  const SLIDER_MAX_UNITS = 1200;
+  const MIN_UNITS = 50;
+  const SLIDER_STEPS = 1000;
   const WA_NUMBER = '919061626868';
-  // Solar can clear up to about 90% of a KSEB bill: fixed charges and meter rent stay
-  // (the same "up to 90%" the home page uses). Shown savings never go above this share of the bill.
-  const SAVINGS_SHARE = 0.9;
-  // Booking buttons on this page: header, phone menu, phone bottom bar, closing band and the result button
   const BOOKING_LINKS = '.header-cta, .drawer-foot a.btn-sun, .mobile-bar a.primary, .closing a.btn-sun, #calcAssessmentBtn';
 
-  // Internal state
-  let currentUnits = 400; // Default units
-  let currentBill = null; // Exact bill typed in bill mode
-  let currentStateIndex = 0; // Default Kerala
-  let isBillMode = false;
-  let billMemo = null;    // the bill typed before switching to Units, so switching back restores it exactly
-  let userSet = false;    // true once the visitor brought a bill/units in the link or changed the calculator
-  let formPrefilled = false; // the form on this page has been filled in from the calculator
+  let isBillMode = true;
+  let currentBill = 3500;
+  let currentUnits = 400;
+  let billMemo = null;
+  let unitsAtSwitch = null;
+  let userSet = false;
+  let formPrefilled = false;
   let ready = false;
   let summaryTimer = null;
-
-  // Cache DOM elements
+  let lastEst = null;
   let elements = {};
+  const dirty = {
+    projectCost: false,
+    subsidy: false,
+    down: false,
+    rate: false,
+    tenure: false,
+    moratorium: false
+  };
 
   function init() {
     elements = {
@@ -49,37 +47,73 @@ window.SolarCalculator = (function() {
       ticks: document.getElementById('calcTicks'),
       modeSeg: document.getElementById('calcModeSeg'),
       fieldLabel: document.querySelector('.calc-field-label'),
-      stateSelect: document.getElementById('calcStateSelect'),
       tabUnits: document.getElementById('tabUnitsMode'),
       tabBill: document.getElementById('tabBillMode'),
       presetPills: document.querySelectorAll('.preset-pill'),
       assessmentBtn: document.getElementById('calcAssessmentBtn'),
       waBtn: document.getElementById('calcWhatsAppBtn'),
       summary: document.getElementById('calcSummary'),
-
-      // Results output elements
+      unitsOptional: document.getElementById('calcUnitsOptional'),
+      unitsOptionalWrap: document.getElementById('calcUnitsOptionalWrap'),
+      yield: document.getElementById('calcYield'),
+      yieldVal: document.getElementById('calcYieldVal'),
+      roof: document.getElementById('calcRoof'),
+      load: document.getElementById('calcLoad'),
+      budget: document.getElementById('calcBudget'),
+      scheme: document.getElementById('calcScheme'),
+      loanBox: document.getElementById('calcLoanBox'),
+      projectCost: document.getElementById('calcProjectCost'),
+      subsidyInput: document.getElementById('calcSubsidyInput'),
+      down: document.getElementById('calcDown'),
+      rate: document.getElementById('calcRate'),
+      tenure: document.getElementById('calcTenure'),
+      tenureUnit: document.getElementById('calcTenureUnit'),
+      moratorium: document.getElementById('calcMoratorium'),
+      loanNote: document.getElementById('calcLoanNote'),
       heroKw: document.getElementById('resultHeroKw'),
       heroKwSub: document.getElementById('resultHeroSub'),
       gaugeFill: document.getElementById('resultGaugeFill'),
+      lead: document.getElementById('resultLead'),
+      currentBill: document.getElementById('resultCurrentBill'),
+      currentBillNote: document.getElementById('resultCurrentBillNote'),
       monthlyUnits: document.getElementById('resultMonthlyUnits'),
-      dailyUnits: document.getElementById('resultDailyUnits'),
-      annualGen: document.getElementById('resultAnnualGen'),
+      monthlyUnitsNote: document.getElementById('resultMonthlyUnitsNote'),
+      genMonthly: document.getElementById('resultGenMonthly'),
+      genNote: document.getElementById('resultGenNote'),
+      billAfter: document.getElementById('resultBillAfter'),
+      billAfterNote: document.getElementById('resultBillAfterNote'),
+      savings: document.getElementById('resultSavings'),
+      savingsNote: document.getElementById('resultSavingsNote'),
+      subsidy: document.getElementById('resultSubsidy'),
+      subsidyNote: document.getElementById('resultSubsidyNote'),
+      emi: document.getElementById('resultEmi'),
+      emiNote: document.getElementById('resultEmiNote'),
       panelCount: document.getElementById('resultPanelCount'),
       roofSpace: document.getElementById('resultRoofSpace'),
       roofNote: document.getElementById('resultRoofNote'),
       inverterCap: document.getElementById('resultInverterCap'),
       inverterNote: document.getElementById('resultInverterNote'),
-      annualSavings: document.getElementById('resultAnnualSavings'),
-      savingsNote: document.getElementById('resultSavingsNote'),
-      co2Offset: document.getElementById('resultCo2Offset'),
       panelGrid: document.getElementById('resultPanelGrid'),
       panelCountTag: document.getElementById('resultPanelCountTag'),
-
-      // Formula breakdown items
+      subsidyCopy: document.getElementById('resultSubsidyCopy'),
+      costCopy: document.getElementById('resultCostCopy'),
+      loanCopy: document.getElementById('resultLoanCopy'),
+      flowIntro: document.getElementById('resultFlowIntro'),
+      flowSelf: document.getElementById('flowSelf'),
+      flowExport: document.getElementById('flowExport'),
+      flowImport: document.getElementById('flowImport'),
+      flowBalance: document.getElementById('flowBalance'),
+      flowEnergy: document.getElementById('flowEnergy'),
+      flowFixed: document.getElementById('flowFixed'),
+      flowFit: document.getElementById('flowFit'),
+      flowSixty: document.getElementById('flowSixty'),
       formulaDaily: document.getElementById('formulaDaily'),
-      formulaSunHours: document.getElementById('formulaSunHours'),
-      formulaDerate: document.getElementById('formulaDerate'),
-      formulaResult: document.getElementById('formulaResult')
+      formulaYield: document.getElementById('formulaYield'),
+      formulaMonth: document.getElementById('formulaMonth'),
+      formulaAnnual: document.getElementById('formulaAnnual'),
+      formulaResult: document.getElementById('formulaResult'),
+      formulaCo2: document.getElementById('formulaCo2'),
+      formulaNotes: document.getElementById('formulaNotes')
     };
 
     if (!elements.slider || !elements.numberInput) return;
@@ -88,7 +122,6 @@ window.SolarCalculator = (function() {
     elements.slider.max = SLIDER_STEPS;
     elements.slider.step = 1;
 
-    populateStates();
     bindEvents();
     applyUrlParams();
     syncInputs();
@@ -97,67 +130,60 @@ window.SolarCalculator = (function() {
     if (userSet) bringResultIntoView();
   }
 
-  // calculator.html?bill=4500 or ?units=400 (from the homepage quick estimate)
   function applyUrlParams() {
     let params;
     try { params = new URLSearchParams(window.location.search); } catch (e) { params = null; }
     const bill = params ? parseFloat(params.get('bill')) : NaN;
     const units = params ? parseFloat(params.get('units')) : NaN;
+    if (params && params.get('period') === '2') {
+      const two = document.querySelector('input[name="calc-period"][value="2"]');
+      if (two) two.checked = true;
+    }
     if (bill > 0) {
       setMode(true);
       currentBill = Math.round(Math.min(bill, MAX_BILL));
-      currentUnits = currentBill / getTariff();
+      billMemo = null;
       userSet = true;
-      if (bill > MAX_BILL) setHint(`The calculator goes up to ₹${fmt(MAX_BILL)} a month, so we've used ₹${fmt(MAX_BILL)}.`, true);
-      else setHint(defaultHint());
+      setHint(bill > MAX_BILL
+        ? 'The calculator goes up to ₹' + fmt(MAX_BILL) + ' a month, so that figure is used.'
+        : defaultHint(), bill > MAX_BILL);
     } else if (units > 0) {
+      currentBill = null;
       setMode(false);
-      currentUnits = Math.round(Math.min(units, maxUnits()));
+      currentUnits = Math.round(Math.min(units, MAX_UNITS));
+      unitsAtSwitch = currentUnits;
+      billMemo = null;
       userSet = true;
       setHint(defaultHint());
     } else {
-      // Monthly Bill is the default input
       setMode(true);
     }
   }
 
-  /* ---------- Range helpers ---------- */
+  function sliderMin() { return isBillMode ? MIN_BILL : MIN_UNITS; }
+  function sliderMax() { return isBillMode ? SLIDER_MAX_BILL : SLIDER_MAX_UNITS; }
+  function typedMax() { return isBillMode ? MAX_BILL : MAX_UNITS; }
+  function activeValue() { return isBillMode ? currentBill : currentUnits; }
 
-  function getTariff() {
-    return getSelectedState().defaultTariff || SOORYAVAMSHI_CONFIG.calculator.averageTariffPerUnitInr;
+  function valueFromPosition(pos) {
+    const min = sliderMin();
+    const max = sliderMax();
+    return min + (max - min) * (pos / SLIDER_STEPS);
   }
 
-  // Highest monthly consumption the calculator covers: a Rs 2,00,000 bill
-  function maxUnits() {
-    return Math.round(MAX_BILL / getTariff());
-  }
-
-  // Right end of the slider in units: a Rs 10,000 bill at the selected tariff
-  function sliderMaxUnits() {
-    return Math.round(SLIDER_MAX_BILL / getTariff());
-  }
-
-  // Straight-line slider: position 0..SLIDER_STEPS <-> units MIN_UNITS..sliderMaxUnits()
-  function unitsFromPosition(pos) {
-    return MIN_UNITS + (sliderMaxUnits() - MIN_UNITS) * (pos / SLIDER_STEPS);
-  }
-
-  function positionFromUnits(units) {
-    const p = (units - MIN_UNITS) / (sliderMaxUnits() - MIN_UNITS);
+  function positionFromValue(value) {
+    if (value == null || !isFinite(value)) return 0;
+    const min = sliderMin();
+    const max = sliderMax();
+    const p = (value - min) / (max - min);
     return Math.round(Math.max(0, Math.min(1, p)) * SLIDER_STEPS);
   }
 
-  // The monthly bill shown and used for savings: the typed bill, or units x tariff
-  function monthlyBill() {
-    return isBillMode && currentBill != null ? currentBill : currentUnits * getTariff();
-  }
-
-  // True when the typed value is beyond the slider's right end
   function isAboveSlider() {
-    return isBillMode ? monthlyBill() > SLIDER_MAX_BILL : currentUnits > sliderMaxUnits();
+    const value = activeValue();
+    return value != null && value > sliderMax();
   }
 
-  // Round slider values to steps people would actually type
   function niceRound(n) {
     if (n < 1000) return Math.round(n / 10) * 10;
     if (n < 5000) return Math.round(n / 50) * 50;
@@ -169,31 +195,83 @@ window.SolarCalculator = (function() {
     return Math.round(n).toLocaleString('en-IN');
   }
 
+  function fmtKwh(n) {
+    if (n == null || !isFinite(n)) return '—';
+    const rounded = Math.abs(n - Math.round(n)) < 0.05 ? Math.round(n) : Math.round(n * 10) / 10;
+    return rounded.toLocaleString('en-IN');
+  }
+
   function fmtShortInr(n) {
-    if (n >= 100000) return `₹${+(n / 100000).toFixed(1)}L`;
-    if (n >= 1000) return `₹${+(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`;
-    return `₹${fmt(n)}`;
+    if (n >= 100000) return '₹' + +(n / 100000).toFixed(1) + 'L';
+    if (n >= 1000) return '₹' + +(n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k';
+    return '₹' + fmt(n);
+  }
+
+  function inrOrDash(n) {
+    return n == null || !isFinite(n) ? '—' : '₹' + fmt(n);
+  }
+
+  function billAfterText(n, veryLow) {
+    if (n == null || !isFinite(n)) return '—';
+    if (veryLow || (n > 0 && n < 1)) return 'Under ₹1';
+    return '₹' + fmt(n);
+  }
+
+  function numOrNull(el) {
+    if (!el || String(el.value).trim() === '') return null;
+    const n = parseFloat(el.value);
+    return isFinite(n) ? n : null;
+  }
+
+  function checkedValue(name, fallback) {
+    const el = document.querySelector('input[name="' + name + '"]:checked');
+    return el ? el.value : fallback;
+  }
+
+  function setText(el, text) { if (el) el.textContent = text; }
+
+  function linkEl(href, label) {
+    const a = document.createElement('a');
+    a.href = href;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = label;
+    return a;
+  }
+
+  function setParts(el, parts) {
+    if (!el) return;
+    el.replaceChildren();
+    parts.forEach(function (part) {
+      if (part == null || part === '') return;
+      el.appendChild(typeof part === 'string' ? document.createTextNode(part) : part);
+    });
   }
 
   function updateSliderProgress() {
     if (!elements.slider) return;
     const percent = (parseFloat(elements.slider.value) / SLIDER_STEPS) * 100;
-    elements.slider.style.setProperty('--slider-percent', `${Math.max(0, Math.min(100, percent))}%`);
+    elements.slider.style.setProperty('--slider-percent', Math.max(0, Math.min(100, percent)) + '%');
+  }
+
+  function updateYieldProgress() {
+    if (!elements.yield) return;
+    const y = parseFloat(elements.yield.value);
+    const pct = ((y - 4) / 2) * 100;
+    elements.yield.style.setProperty('--slider-percent', Math.max(0, Math.min(100, pct)) + '%');
+    if (elements.yieldVal && isFinite(y)) elements.yieldVal.textContent = y.toFixed(1) + ' kWh per kW per day';
+    elements.yield.setAttribute('aria-valuenow', String(y));
   }
 
   function updateTicks() {
     if (!elements.ticks) return;
-    const tariff = getTariff();
-    const labels = [0, 1 / 3, 2 / 3, 1].map((t, i) => {
-      const u = unitsFromPosition(t * SLIDER_STEPS);
-      if (isBillMode) {
-        const bill = i === 3 ? SLIDER_MAX_BILL : niceRound(u * tariff);
-        return fmtShortInr(bill);
-      }
-      const val = i === 3 ? sliderMaxUnits() : niceRound(u);
-      return i === 3 ? `${fmt(val)} Units` : fmt(val);
+    const labels = [0, 1 / 3, 2 / 3, 1].map(function (t, i) {
+      const raw = valueFromPosition(t * SLIDER_STEPS);
+      const value = i === 0 ? sliderMin() : (i === 3 ? sliderMax() : niceRound(raw));
+      if (isBillMode) return fmtShortInr(value);
+      return i === 3 ? fmt(value) + ' Units' : fmt(value);
     });
-    elements.ticks.innerHTML = labels.map(l => `<span>${l}</span>`).join('');
+    elements.ticks.innerHTML = labels.map(function (l) { return '<span>' + l + '</span>'; }).join('');
   }
 
   function setHint(text, warn) {
@@ -205,49 +283,36 @@ window.SolarCalculator = (function() {
   function defaultHint() {
     if (isAboveSlider()) {
       return isBillMode
-        ? `Using your typed bill of ₹${fmt(monthlyBill())}. The slider stops at ₹${fmt(SLIDER_MAX_BILL)}; type any bill up to ₹${fmt(MAX_BILL)}.`
-        : `Using your typed ${fmt(currentUnits)} units. The slider stops at ${fmt(sliderMaxUnits())} units; type up to ${fmt(maxUnits())}.`;
+        ? 'Using your typed bill of ₹' + fmt(currentBill) + '. The slider stops at ₹' + fmt(SLIDER_MAX_BILL) + '; type any bill up to ₹' + fmt(MAX_BILL) + '.'
+        : 'Using your typed ' + fmt(currentUnits) + ' units. The slider stops at ' + fmt(SLIDER_MAX_UNITS) + ' units; type up to ' + fmt(MAX_UNITS) + '.';
     }
     return isBillMode
-      ? `Type any bill up to ₹${fmt(MAX_BILL)} a month, or drag the slider up to ₹${fmt(SLIDER_MAX_BILL)}.`
-      : `Type any amount up to ${fmt(maxUnits())} units a month, or drag the slider.`;
+      ? 'Type any bill up to ₹' + fmt(MAX_BILL) + ' a month, or drag the slider up to ₹' + fmt(SLIDER_MAX_BILL) + '.'
+      : 'Type any amount up to ' + fmt(MAX_UNITS) + ' units a month, or drag the slider.';
   }
 
-  // Push currentUnits / currentBill into the slider and the number box
   function syncInputs(skipNumberBox) {
-    elements.slider.value = positionFromUnits(currentUnits);
+    const value = activeValue();
+    elements.slider.value = positionFromValue(value == null ? sliderMin() : value);
     elements.slider.classList.toggle('over', isAboveSlider());
-    // Screen readers hear the bill or units, not the slider's position number
-    elements.slider.setAttribute('aria-label', isBillMode ? 'Monthly bill' : 'Monthly units');
-    elements.slider.setAttribute('aria-valuetext', isBillMode
-      ? `₹${fmt(monthlyBill())} a month`
-      : `${fmt(currentUnits)} units a month`);
+    elements.slider.setAttribute('aria-label', isBillMode ? 'Your current KSEB bill' : 'Monthly electricity consumption');
+    elements.slider.setAttribute('aria-valuetext', value == null
+      ? 'No value'
+      : (isBillMode ? '₹' + fmt(value) + ' a month' : fmt(value) + ' units a month'));
     updateSliderProgress();
     if (!skipNumberBox) {
-      elements.numberInput.value = isBillMode ? Math.round(monthlyBill()) : Math.round(currentUnits);
+      elements.numberInput.value = value == null ? '' : String(Math.round(value));
     }
-    elements.numberInput.max = isBillMode ? MAX_BILL : maxUnits();
-    elements.presetPills.forEach(p => {
-      const on = !isBillMode && parseInt(p.getAttribute('data-units'), 10) === Math.round(currentUnits);
+    elements.numberInput.max = typedMax();
+    elements.presetPills.forEach(function (p) {
+      const on = !isBillMode && value != null && parseInt(p.getAttribute('data-units'), 10) === Math.round(value);
       p.classList.toggle('active', on);
       p.setAttribute('aria-pressed', String(on));
     });
     updateTicks();
+    updateYieldProgress();
   }
 
-  function populateStates() {
-    if (!elements.stateSelect) return;
-    elements.stateSelect.innerHTML = '';
-    SOORYAVAMSHI_CONFIG.calculator.states.forEach((st, idx) => {
-      const opt = document.createElement('option');
-      opt.value = idx;
-      opt.textContent = `${st.name} (Avg. ₹${st.defaultTariff}/unit)`;
-      if (idx === 0) opt.selected = true;
-      elements.stateSelect.appendChild(opt);
-    });
-  }
-
-  // Something the visitor did changed the estimate
   function changed() {
     userSet = true;
     renderCalculations();
@@ -255,20 +320,15 @@ window.SolarCalculator = (function() {
   }
 
   function bindEvents() {
-    // Slider: straight-line position -> units
-    const onSliderUpdate = function(e) {
+    const onSliderUpdate = function (e) {
       const pos = parseInt(e.target.value, 10);
-      const units = niceRound(unitsFromPosition(pos));
-      currentUnits = Math.max(MIN_UNITS, Math.min(sliderMaxUnits(), units));
-      currentBill = isBillMode ? Math.min(SLIDER_MAX_BILL, niceRound(currentUnits * getTariff())) : null;
+      let value = niceRound(valueFromPosition(pos));
+      value = Math.max(sliderMin(), Math.min(sliderMax(), value));
+      if (pos >= SLIDER_STEPS) value = sliderMax();
+      if (pos <= 0) value = sliderMin();
+      if (isBillMode) currentBill = value;
+      else currentUnits = value;
       billMemo = null;
-      if (pos >= SLIDER_STEPS) {
-        // The right end is exactly Rs 10,000 (or its units)
-        if (isBillMode) { currentBill = SLIDER_MAX_BILL; currentUnits = SLIDER_MAX_BILL / getTariff(); }
-        else currentUnits = sliderMaxUnits();
-      } else if (isBillMode) {
-        currentUnits = currentBill / getTariff();
-      }
       setHint(defaultHint());
       syncInputs();
       changed();
@@ -276,29 +336,29 @@ window.SolarCalculator = (function() {
     elements.slider.addEventListener('input', onSliderUpdate);
     elements.slider.addEventListener('change', onSliderUpdate);
 
-    // Number box: whatever is typed drives the result, up to the cap
-    elements.numberInput.addEventListener('input', function(e) {
+    elements.numberInput.addEventListener('input', function (e) {
       const raw = String(e.target.value).replace(/[^\d.]/g, '');
       const val = parseFloat(raw);
-      if (isNaN(val) || val <= 0) {
-        setHint(isBillMode ? 'Enter your monthly bill in ₹.' : 'Enter your monthly units.', true);
+      billMemo = null;
+      if (raw === '' || !isFinite(val)) {
+        if (isBillMode) currentBill = null;
+        else currentUnits = null;
+        setHint(isBillMode ? 'Enter your KSEB bill in ₹.' : 'Enter your electricity consumption in units.', true);
+        syncInputs(true);
+        changed();
         return;
       }
-      const cap = isBillMode ? MAX_BILL : maxUnits();
+      const cap = typedMax();
       const used = Math.min(val, cap);
-      billMemo = null;
-      if (isBillMode) {
-        currentBill = used;
-        currentUnits = used / getTariff();
-      } else {
-        currentBill = null;
-        currentUnits = used;
-      }
+      if (isBillMode) currentBill = used;
+      else currentUnits = used;
       if (val > cap) {
         elements.slider.classList.add('over');
         setHint(isBillMode
-          ? `The calculator goes up to ₹${fmt(MAX_BILL)} a month, so we've used ₹${fmt(MAX_BILL)}.`
-          : `The calculator goes up to ${fmt(cap)} units a month, so we've used ${fmt(cap)}.`, true);
+          ? 'The calculator goes up to ₹' + fmt(MAX_BILL) + ' a month, so that figure is used.'
+          : 'The calculator goes up to ' + fmt(cap) + ' units a month, so that figure is used.', true);
+      } else if (val <= 0) {
+        setHint(isBillMode ? 'Enter a bill above zero.' : 'Enter units above zero.', true);
       } else {
         setHint(defaultHint());
       }
@@ -306,53 +366,94 @@ window.SolarCalculator = (function() {
       changed();
     });
 
-    // When the box loses focus, show the value actually used
-    elements.numberInput.addEventListener('change', function() {
-      syncInputs();
-    });
+    elements.numberInput.addEventListener('change', function () { syncInputs(); });
 
-    // State change: tariff and insolation change, the typed bill stays the same
-    if (elements.stateSelect) elements.stateSelect.addEventListener('change', function(e) {
-      currentStateIndex = parseInt(e.target.value, 10) || 0;
-      if (isBillMode && currentBill != null) {
-        currentUnits = currentBill / getTariff();
-      }
-      currentUnits = Math.min(currentUnits, maxUnits());
-      billMemo = null;
-      setHint(defaultHint());
-      syncInputs();
-      changed();
+    elements.tabUnits.addEventListener('click', function () {
+      if (isBillMode) { setMode(false); changed(); }
     });
-
-    // Mode switch (Bill vs Units): a two-option radio group, arrow keys move between them
-    elements.tabUnits.addEventListener('click', function() { if (isBillMode) { setMode(false); scheduleSummary(); } });
-    elements.tabBill.addEventListener('click', function() { if (!isBillMode) { setMode(true); scheduleSummary(); } });
+    elements.tabBill.addEventListener('click', function () {
+      if (!isBillMode) { setMode(true); changed(); }
+    });
     if (elements.modeSeg) {
-      elements.modeSeg.addEventListener('keydown', function(e) {
+      elements.modeSeg.addEventListener('keydown', function (e) {
         if (!/^Arrow(Left|Right|Up|Down)$/.test(e.key)) return;
         e.preventDefault();
         setMode(!isBillMode);
-        scheduleSummary();
+        changed();
         (isBillMode ? elements.tabBill : elements.tabUnits).focus();
       });
     }
 
-    // Preset pills (always in units)
-    elements.presetPills.forEach(pill => {
-      pill.addEventListener('click', function() {
-        currentUnits = parseInt(this.getAttribute('data-units'), 10);
-        currentBill = isBillMode ? Math.round(currentUnits * getTariff()) : null;
-        if (isBillMode) currentUnits = currentBill / getTariff();
-        billMemo = null;
+    elements.presetPills.forEach(function (pill) {
+      pill.addEventListener('click', function () {
+        const picked = parseInt(this.getAttribute('data-units'), 10);
+        if (elements.unitsOptional) elements.unitsOptional.value = '';
+        if (isBillMode) setMode(false);
+        currentUnits = picked;
+        unitsAtSwitch = picked;
         setHint(defaultHint());
         syncInputs();
         changed();
       });
     });
 
-    // Booking buttons open the form on this page, filled in with the estimate.
-    // A new-tab or modified click follows the link to contact.html, which carries the same estimate.
-    document.addEventListener('click', function(e) {
+    if (elements.unitsOptional) {
+      elements.unitsOptional.addEventListener('input', function () { changed(); });
+    }
+    [elements.roof, elements.load, elements.budget].forEach(function (el) {
+      if (el) el.addEventListener('input', function () { changed(); });
+    });
+    if (elements.yield) {
+      elements.yield.addEventListener('input', function () {
+        updateYieldProgress();
+        changed();
+      });
+    }
+
+    const card = document.getElementById('calc-card');
+    if (card) {
+      card.addEventListener('change', function (e) {
+        const name = e.target && e.target.name;
+        if (name === 'calc-period' || name === 'calc-use' || name === 'calc-connection' || name === 'calc-pay') {
+          changed();
+        }
+      });
+    }
+
+    function markFilled(flag, el) {
+      if (!el) return;
+      el.addEventListener('input', function () {
+        dirty[flag] = String(el.value).trim() !== '';
+        changed();
+      });
+    }
+    markFilled('projectCost', elements.projectCost);
+    markFilled('subsidy', elements.subsidyInput);
+    markFilled('down', elements.down);
+    markFilled('rate', elements.rate);
+    markFilled('tenure', elements.tenure);
+    markFilled('moratorium', elements.moratorium);
+
+    if (elements.tenureUnit) {
+      elements.tenureUnit.addEventListener('change', function () {
+        if (dirty.tenure) {
+          const n = parseFloat(elements.tenure.value);
+          if (isFinite(n)) {
+            if (elements.tenureUnit.value === 'months') elements.tenure.value = String(Math.round(n * 12));
+            else elements.tenure.value = String(Math.round((n / 12) * 10) / 10);
+          }
+        }
+        changed();
+      });
+    }
+    if (elements.scheme) {
+      elements.scheme.addEventListener('change', function () {
+        dirty.rate = false;
+        changed();
+      });
+    }
+
+    document.addEventListener('click', function (e) {
       const a = e.target.closest && e.target.closest(BOOKING_LINKS);
       if (!a) return;
       updateBookingLinks();
@@ -362,9 +463,8 @@ window.SolarCalculator = (function() {
       openForm(a === elements.assessmentBtn || userSet);
     });
 
-    // "Send this estimate on WhatsApp"
     if (elements.waBtn) {
-      elements.waBtn.addEventListener('click', function() {
+      elements.waBtn.addEventListener('click', function () {
         this.href = whatsappLink();
         if (window.svTrack) window.svTrack('calculator_whatsapp');
       });
@@ -374,175 +474,236 @@ window.SolarCalculator = (function() {
   function setMode(billMode) {
     const wasBill = isBillMode;
     isBillMode = billMode;
-    [[elements.tabBill, isBillMode], [elements.tabUnits, !isBillMode]].forEach(([btn, on]) => {
+    [[elements.tabBill, isBillMode], [elements.tabUnits, !isBillMode]].forEach(function (pair) {
+      const btn = pair[0];
+      const on = pair[1];
+      if (!btn) return;
       btn.classList.toggle('active', on);
       btn.setAttribute('aria-checked', String(on));
       btn.tabIndex = on ? 0 : -1;
     });
     if (elements.modeSeg) elements.modeSeg.classList.toggle('bill', isBillMode);
     if (elements.currency) elements.currency.hidden = !isBillMode;
+    if (elements.unitsOptionalWrap) elements.unitsOptionalWrap.hidden = !isBillMode;
 
     if (isBillMode) {
-      // Back from Units with the same units: give back the exact bill that was typed (3500, not 3499)
-      if (billMemo && Math.round(currentUnits) === billMemo.units) currentBill = billMemo.bill;
-      else currentBill = Math.round(currentUnits * getTariff());
-      currentUnits = currentBill / getTariff();
+      if (!wasBill && billMemo != null) currentBill = billMemo;
+      if (!wasBill && unitsAtSwitch != null && currentUnits != null && Math.round(currentUnits) !== Math.round(unitsAtSwitch) && elements.unitsOptional) {
+        elements.unitsOptional.value = String(Math.round(currentUnits));
+      }
       billMemo = null;
-      elements.unitLabel.textContent = "/ month";
-      if (elements.fieldLabel) elements.fieldLabel.textContent = "Average Monthly Electricity Bill";
+      unitsAtSwitch = null;
+      if (elements.unitLabel) elements.unitLabel.textContent = '/ month';
+      if (elements.fieldLabel) elements.fieldLabel.textContent = 'Your Current KSEB Bill';
     } else {
-      if (wasBill && currentBill != null) billMemo = { bill: currentBill, units: Math.round(currentUnits) };
-      currentBill = null;
-      currentUnits = Math.round(currentUnits);
-      elements.unitLabel.textContent = "Units";
-      if (elements.fieldLabel) elements.fieldLabel.textContent = "Monthly Electricity Consumption";
+      if (wasBill && currentBill != null) billMemo = currentBill;
+      const opt = numOrNull(elements.unitsOptional);
+      if (opt != null && opt > 0) currentUnits = opt;
+      else if (wasBill && lastEst && lastEst.ok && lastEst.monthlyUnits > 0) {
+        currentUnits = Math.round(lastEst.monthlyUnits * (lastEst.periodMonths || 1));
+      }
+      unitsAtSwitch = currentUnits;
+      if (elements.unitLabel) elements.unitLabel.textContent = 'Units';
+      if (elements.fieldLabel) elements.fieldLabel.textContent = 'Monthly Electricity Consumption';
     }
     setHint(defaultHint());
-    syncInputs();
-    renderCalculations();
+    if (ready) syncInputs();
   }
 
-  function getSelectedState() {
-    return SOORYAVAMSHI_CONFIG.calculator.states[currentStateIndex] || SOORYAVAMSHI_CONFIG.calculator.states[0];
+  function periodMonths() {
+    return checkedValue('calc-period', '1') === '2' ? 2 : 1;
+  }
+
+  function gather() {
+    const input = {
+      periodMonths: periodMonths(),
+      yieldKwh: elements.yield ? parseFloat(elements.yield.value) : 5,
+      usagePattern: checkedValue('calc-use', 'mixed'),
+      residential: checkedValue('calc-connection', 'home') !== 'other',
+      payment: checkedValue('calc-pay', 'cash') === 'loan' ? 'loan' : 'cash',
+      schemeId: elements.scheme ? elements.scheme.value : 'sbi',
+      roofSqFt: numOrNull(elements.roof),
+      sanctionedLoadKw: numOrNull(elements.load),
+      budgetInr: numOrNull(elements.budget)
+    };
+    if (isBillMode) {
+      if (currentBill != null) input.monthlyBill = currentBill;
+      const opt = numOrNull(elements.unitsOptional);
+      if (opt != null && opt > 0) {
+        input.monthlyUnits = opt;
+        input.unitsAreMeasured = true;
+      } else {
+        input.unitsAreMeasured = false;
+      }
+    } else if (currentUnits != null) {
+      input.monthlyUnits = currentUnits;
+      input.unitsAreMeasured = true;
+    }
+    if (input.payment === 'loan') {
+      if (dirty.projectCost) input.projectCost = numOrNull(elements.projectCost);
+      if (dirty.subsidy && input.residential) input.subsidyOverride = numOrNull(elements.subsidyInput);
+      if (dirty.down) input.downPayment = numOrNull(elements.down);
+      if (dirty.rate) input.annualRate = numOrNull(elements.rate);
+      if (dirty.tenure) {
+        input.tenureMonths = numOrNull(elements.tenure);
+        input.tenureUnit = elements.tenureUnit ? elements.tenureUnit.value : 'months';
+      }
+      if (dirty.moratorium) input.moratoriumMonths = numOrNull(elements.moratorium);
+    }
+    return input;
+  }
+
+  function runEstimate() {
+    if (!window.SolarModel) return { ok: false, errors: ['The calculation model did not load.'] };
+    return window.SolarModel.estimate(gather());
   }
 
   /**
-   * Pure engineering calculation engine
+   * Backward-compatible size for a monthly unit figure.
+   * recommendedKw is DC kWp to one decimal. panelCount uses the same 550 W modules.
    */
-  function compute(monthlyUnits, stateObj) {
-    const config = SOORYAVAMSHI_CONFIG.calculator;
-    const dailyUnits = monthlyUnits / 30;
-    const effectiveSunHours = config.baseDailySunHours * stateObj.factor;
-    const systemDerate = config.systemPerformanceRatio;
+  function compute(monthlyUnits) {
+    if (!window.SolarModel) return { recommendedKw: '0.0', panelCount: 0 };
+    const est = window.SolarModel.estimate({
+      monthlyUnits: monthlyUnits,
+      unitsAreMeasured: true,
+      residential: true,
+      payment: 'cash'
+    });
+    if (!est.ok) return { recommendedKw: '0.0', panelCount: 0 };
+    return { recommendedKw: est.dcKwp.toFixed(1), panelCount: est.panelCount };
+  }
 
-    // Required capacity in kWp = Daily Units / (Peak Sun Hours * Derate Factor)
-    const rawKw = dailyUnits / (effectiveSunHours * systemDerate);
-    // Round to realistic installer sizing (1 decimal)
-    const recommendedKw = Math.max(1.0, Math.round(rawKw * 10) / 10);
-
-    // Generation estimates
-    const dailyGen = recommendedKw * effectiveSunHours * systemDerate;
-    const annualGen = Math.round(dailyGen * 365);
-
-    // Equipment sizing
-    const panelCount = Math.ceil((recommendedKw * 1000) / config.standardPanelWattage);
-    const roofSpaceSqFt = Math.round(recommendedKw * config.spaceRequiredPerKwSqFt);
-    const roofSpaceSqM = Math.round(roofSpaceSqFt * 0.0929);
-
-    // Inverter standard rating selection
-    let inverterCap = "3.3 kW Single-Phase";
-    let inverterKw = 3.3, inverterPhase = "single phase";
-    if (recommendedKw > 3.3 && recommendedKw <= 5.5) {
-      inverterCap = "5.0 kW Single/Three-Phase"; inverterKw = 5; inverterPhase = "single or three phase";
-    } else if (recommendedKw > 5.5 && recommendedKw <= 8.5) {
-      inverterCap = "8.0 kW Three-Phase"; inverterKw = 8; inverterPhase = "three phase";
-    } else if (recommendedKw > 8.5 && recommendedKw <= 11.5) {
-      inverterCap = "10.0 kW Three-Phase"; inverterKw = 10; inverterPhase = "three phase";
-    } else if (recommendedKw > 11.5 && recommendedKw <= 16.0) {
-      inverterCap = "15.0 kW Three-Phase"; inverterKw = 15; inverterPhase = "three phase";
-    } else if (recommendedKw > 16.0) {
-      inverterCap = `${Math.ceil(recommendedKw)} kW Commercial Array`; inverterKw = Math.ceil(recommendedKw); inverterPhase = "three phase, commercial";
+  function writeIfClean(el, flag, value, digits) {
+    if (!el || dirty[flag] || document.activeElement === el) return;
+    if (value == null || !isFinite(value)) {
+      el.value = '';
+      return;
     }
-
-    // Financial & Environmental returns
-    const tariff = stateObj.defaultTariff || config.averageTariffPerUnitInr;
-    // Never more than 90% of the yearly bill for these units: fixed charges and meter rent stay on the bill
-    const generationValue = annualGen * tariff;
-    const annualSavings = Math.floor(Math.min(generationValue, monthlyUnits * 12 * tariff * SAVINGS_SHARE) / 100) * 100;
-    const monthlySavings = Math.round(annualSavings / 12);
-    const co2Offset = ((annualGen * config.co2OffsetPerKwhKg) / 1000).toFixed(1);
-
-    return {
-      monthlyUnits,
-      dailyUnits: dailyUnits.toFixed(1),
-      effectiveSunHours: effectiveSunHours.toFixed(1),
-      systemDerate: (systemDerate * 100).toFixed(0),
-      recommendedKw: recommendedKw.toFixed(1),
-      annualGen: annualGen.toLocaleString('en-IN'),
-      panelCount,
-      roofSpaceSqFt,
-      roofSpaceSqM,
-      inverterCap,
-      inverterKw,
-      inverterPhase,
-      generationValue,
-      annualSavingsValue: annualSavings,
-      annualSavings: `₹${annualSavings.toLocaleString('en-IN')}`,
-      monthlySavings: `₹${monthlySavings.toLocaleString('en-IN')}`,
-      co2Offset: `${co2Offset} Tons / yr`
-    };
+    const factor = Math.pow(10, digits == null ? 0 : digits);
+    const shown = Math.round(value * factor) / factor;
+    el.value = String(shown);
   }
 
-  // The estimate as the visitor sees it (the typed bill wins over units x tariff)
-  function currentEstimate() {
-    const results = compute(Math.round(currentUnits), getSelectedState());
-    const bill = monthlyBill();
-    const yearlyBill = Math.round(bill * 12);
-    // Savings: what the panels make at the tariff, but never above 90% of the bill the visitor gave
-    const capped = results.generationValue >= yearlyBill * SAVINGS_SHARE;
-    const savings = Math.floor(Math.min(results.generationValue, yearlyBill * SAVINGS_SHARE) / 100) * 100;
-    // A bill worked out from units is shown to the nearest ₹10 (₹3,500, not ₹3,499)
-    const shownBill = isBillMode ? Math.round(bill) : Math.round(bill / 10) * 10;
-    return {
-      results,
-      kw: results.recommendedKw,
-      panels: results.panelCount,
-      units: results.monthlyUnits,
-      bill: shownBill,
-      mode: isBillMode ? 'bill' : 'units',
-      yearlyBill: isBillMode ? yearlyBill : shownBill * 12,
-      savings,
-      share: capped ? Math.round(SAVINGS_SHARE * 100) : (yearlyBill > 0 ? Math.round(savings / yearlyBill * 100) : 0)
-    };
+  function syncLoanFields(est) {
+    const loanOn = checkedValue('calc-pay', 'cash') === 'loan';
+    if (elements.loanBox) elements.loanBox.hidden = !loanOn;
+    if (!loanOn || !est || !est.ok || !est.loan) return;
+    const loan = est.loan;
+    writeIfClean(elements.projectCost, 'projectCost', est.grossCostInr, 0);
+    writeIfClean(elements.subsidyInput, 'subsidy', est.subsidyUsedInr, 0);
+    writeIfClean(elements.down, 'down', loan.downPaymentInr, 0);
+    if (loan.missingRate) {
+      if (elements.rate) {
+        const range = loan.range;
+        elements.rate.placeholder = range ? (range[0] + '–' + range[1]) : 'Type the bank rate';
+      }
+      writeIfClean(elements.rate, 'rate', null, 2);
+    } else {
+      if (elements.rate) elements.rate.placeholder = '';
+      writeIfClean(elements.rate, 'rate', loan.annualRatePercent, 2);
+    }
+    if (!dirty.tenure && elements.tenure && document.activeElement !== elements.tenure && loan.tenureMonths) {
+      if (elements.tenureUnit && elements.tenureUnit.value === 'years') {
+        const years = loan.tenureMonths / 12;
+        elements.tenure.value = String(Number.isInteger(years) ? years : Math.round(years * 10) / 10);
+      } else {
+        elements.tenure.value = String(loan.tenureMonths);
+      }
+    }
+    writeIfClean(elements.moratorium, 'moratorium', loan.moratoriumMonths, 0);
+    if (elements.loanNote) {
+      const scheme = loan.scheme;
+      elements.loanNote.textContent = scheme && scheme.note ? scheme.note : '';
+    }
   }
 
-  function setText(el, text) { if (el) el.textContent = text; }
+  function clearReadout() {
+    [elements.currentBill, elements.monthlyUnits, elements.genMonthly, elements.billAfter, elements.savings, elements.subsidy, elements.emi, elements.panelCount, elements.roofSpace, elements.inverterCap, elements.flowSelf, elements.flowExport, elements.flowImport, elements.flowBalance, elements.flowEnergy, elements.flowFixed, elements.flowFit, elements.formulaDaily, elements.formulaYield, elements.formulaMonth, elements.formulaAnnual, elements.formulaResult, elements.formulaCo2].forEach(function (el) {
+      setText(el, '—');
+    });
+    setText(elements.heroKw, '—');
+    setText(elements.heroKwSub, 'Kerala, on-grid, no battery. Enter a bill or the units on it.');
+    if (elements.flowSixty) elements.flowSixty.replaceChildren();
+    setParts(elements.subsidyCopy, []);
+    setParts(elements.costCopy, []);
+    setParts(elements.loanCopy, []);
+    renderPanelMatrix(0);
+  }
 
   function renderCalculations() {
-    const est = currentEstimate();
-    const results = est.results;
-
-    // Update Hero badge
-    setText(elements.heroKw, `${results.recommendedKw} kW`);
-    setText(elements.heroKwSub, est.mode === 'bill'
-      ? `For your ₹${fmt(est.bill)} monthly bill (about ${fmt(est.units)} units a month).`
-      : `For your ${fmt(est.units)} units a month (a bill of about ₹${fmt(est.bill)}).`);
-
-    // Circular gauge (log scale, so 3 kW homes and 250 kW plants both read clearly)
-    if (elements.gaugeFill) {
-      const circumference = 264;
-      const kwVal = parseFloat(results.recommendedKw);
-      const ratio = Math.min(1.0, Math.max(0.08, Math.log(1 + kwVal) / Math.log(1 + 300)));
-      const offset = circumference - (circumference * ratio);
-      elements.gaugeFill.style.strokeDashoffset = offset;
+    const est = runEstimate();
+    lastEst = est;
+    syncLoanFields(est);
+    if (!est.ok) {
+      clearReadout();
+      setText(elements.lead, (est.errors && est.errors.length ? est.errors : ['Enter a bill or the units.']).join(' '));
+      setText(elements.formulaNotes, (est.warnings || []).join(' '));
+      setText(elements.flowIntro, '');
+      updateBookingLinks(est);
+      updateWhatsAppLinks(est);
+      return;
     }
 
-    // Metric tiles: a short value, with any detail in the small line under it
-    setText(elements.monthlyUnits, `${fmt(results.monthlyUnits)} kWh`);
-    setText(elements.dailyUnits, `${results.dailyUnits} kWh`);
-    setText(elements.annualGen, `${results.annualGen} kWh`);
-    setText(elements.panelCount, `${fmt(results.panelCount)} panels`);
-    setText(elements.roofSpace, `${fmt(results.roofSpaceSqFt)} sq ft`);
-    setText(elements.roofNote, `about ${fmt(results.roofSpaceSqM)} m², free of shade`);
-    setText(elements.inverterCap, `${results.inverterKw} kW`);
-    setText(elements.inverterNote, results.inverterPhase);
-    setText(elements.annualSavings, `₹${fmt(est.savings)}`);
-    setText(elements.savingsNote, `up to ${est.share}% of your ₹${fmt(est.yearlyBill)} bill`);
-    setText(elements.co2Offset, results.co2Offset);
+    setText(elements.heroKw, est.capacityLabel);
+    setText(elements.heroKwSub, est.dcKwp.toFixed(2) + ' kWp DC · ' + est.panelCount + ' × ' + est.panelWattage + ' W. Kerala, on-grid, no battery.');
 
-    // Render interactive solar panel array
-    renderPanelMatrix(results.panelCount);
+    if (elements.gaugeFill) {
+      const circumference = 264;
+      const ratio = Math.min(1, Math.max(0.08, Math.log(1 + est.dcKwp) / Math.log(1 + 300)));
+      elements.gaugeFill.style.strokeDashoffset = String(circumference - (circumference * ratio));
+    }
 
-    // Update formula breakdown
-    setText(elements.formulaDaily, `${results.dailyUnits} kWh/day`);
-    setText(elements.formulaSunHours, `${results.effectiveSunHours} hrs`);
-    setText(elements.formulaDerate, `${results.systemDerate}%`);
-    setText(elements.formulaResult, `${results.recommendedKw} kWp`);
+    const lead = [];
+    if (est.periodMonths === 2) lead.push('Two-month figure, shown per month. Solar does not change KSEB’s billing period.');
+    if (est.preliminaryUnits) lead.push('A rupee bill does not map exactly to units. Slabs, fixed charges and duty sit between the amount and the kWh, so this size is preliminary.');
+    if (est.siteAssessment) lead.push('A site assessment is recommended.');
+    if (est.phase === 'three') lead.push('Above 5 kW DC, the fixed charge uses the three-phase slab.');
+    if (est.notes && est.notes.length) lead.push(est.notes.join(' '));
+    setText(elements.lead, lead.join(' '));
 
+    setText(elements.currentBill, inrOrDash(est.currentBillInr));
+    setText(elements.currentBillNote, est.currentBillSource === 'schedule'
+      ? 'per month, from the LT-I schedule, before duty'
+      : (est.periodMonths === 2 ? 'per month, from a two-month bill' : 'per month, as entered'));
+    setText(elements.monthlyUnits, fmtKwh(est.monthlyUnits) + ' kWh');
+    setText(elements.monthlyUnitsNote, est.unitsAreMeasured ? 'from the units entered' : 'indicative, from the rupee bill');
+    setText(elements.genMonthly, fmtKwh(est.generation.monthlyKwh) + ' kWh');
+    setText(elements.genNote, fmtKwh(est.generation.dailyKwh) + ' kWh a day · 30-day month');
+    setText(elements.billAfter, billAfterText(est.postSolarBillInr, est.postSolar && est.postSolar.veryLow));
+    setText(elements.billAfterNote, est.postSolar && est.postSolar.veryLow
+      ? 'Very low on this estimate. It is not guaranteed.'
+      : 'same month, before duty');
+    setText(elements.savings, inrOrDash(est.monthlySavingsInr));
+    setText(elements.savingsNote, est.annualSavingsInr == null
+      ? 'needs a current bill and a tariff'
+      : '₹' + fmt(est.annualSavingsInr) + ' a year, same comparison');
+    setText(elements.subsidy, inrOrDash(est.subsidyUsedInr));
+    setText(elements.subsidyNote, est.showNetCost ? 'potential, if eligible' : 'not applied on this connection');
+    if (est.loan && est.loan.active && est.loan.emiInr != null) {
+      setText(elements.emi, inrOrDash(est.loan.emiInr));
+      setText(elements.emiNote, 'a month, plus the bill after solar');
+    } else if (est.loan && est.loan.active && est.loan.missingRate) {
+      setText(elements.emi, '—');
+      setText(elements.emiNote, 'type an interest rate');
+    } else {
+      setText(elements.emi, '—');
+      setText(elements.emiNote, 'cash purchase');
+    }
+    setText(elements.panelCount, fmt(est.panelCount) + ' panels');
+    setText(elements.roofSpace, fmt(est.roofSqFt) + ' sq ft');
+    setText(elements.roofNote, 'about ' + fmt(est.roofSqM) + ' m², shade-free');
+    setText(elements.inverterCap, est.inverter.text);
+    setText(elements.inverterNote, est.inverter.phase);
+
+    renderSubsidy(est);
+    renderLoan(est);
+    renderPanelMatrix(est.panelCount);
+    renderFlows(est);
+    renderFormula(est);
     updateBookingLinks(est);
     updateWhatsAppLinks(est);
-    // Keep the form in step: refill it while it is empty or still holds what we wrote,
-    // and hide the estimate once the visitor has typed their own figure there
+
     if (window.svShowEstimate && (userSet || formPrefilled)) {
       const field = document.getElementById('client-consumption');
       if (field && (!field.value.trim() || field.value === field.dataset.autoValue)) prefillForm();
@@ -550,128 +711,229 @@ window.SolarCalculator = (function() {
     }
   }
 
+  function renderSubsidy(est) {
+    const sub = est.subsidy || {};
+    const amount = est.subsidyUsedInr || 0;
+    if (est.showNetCost) {
+      setParts(elements.subsidyCopy, [
+        'Potential subsidy ₹' + fmt(amount) + ' on ' + fmtKwh(sub.eligibleKw) + ' kW of this ' + est.dcKwp.toFixed(2) + ' kWp system. The central scheme is ₹30,000 per kW for the first 2 kW and ₹18,000 per kW up to 3 kW, capped at ₹78,000. It applies to an eligible residential connection, through a registered vendor, and it is paid after commissioning. It is not guaranteed and it is not immediate. ',
+        linkEl('https://pmsuryaghar.gov.in/', 'pmsuryaghar.gov.in')
+      ]);
+    } else {
+      setParts(elements.subsidyCopy, [
+        (sub.reason || 'No central CFA is applied on this connection.') + ' Gross indicative cost ₹' + fmt(est.grossCostInr) + '. The subsidy is not guaranteed and it is not immediate. ',
+        linkEl('https://pmsuryaghar.gov.in/', 'pmsuryaghar.gov.in')
+      ]);
+    }
+    const costBits = [];
+    costBits.push('Indicative system cost ₹' + fmt(est.grossCostInr) + (est.grossCostIsIndicative
+      ? ' (₹' + fmt(est.indicativeCostPerKw) + ' per kW, not a Suryavamshi quote).'
+      : '.'));
+    if (est.showNetCost && est.netCostInr != null) {
+      costBits.push(' Net upfront after the potential subsidy: ₹' + fmt(est.netCostInr) + '.');
+    }
+    if (est.paybackYears != null && isFinite(est.paybackYears)) {
+      costBits.push(' Indicative payback about ' + est.paybackYears.toFixed(1) + ' years if these monthly savings continued.');
+    }
+    setParts(elements.costCopy, [costBits.join('')]);
+  }
+
+  function renderLoan(est) {
+    const loan = est.loan;
+    if (!loan || !loan.active) {
+      setParts(elements.loanCopy, ['Cash purchase. EMI is not part of this estimate.']);
+      return;
+    }
+    const parts = [];
+    if (loan.missingRate) {
+      const range = loan.range ? ' The published range is ' + loan.range[0] + '% to ' + loan.range[1] + '%.' : '';
+      const checked = loan.lastVerified ? ' Last checked ' + loan.lastVerified + '.' : '';
+      parts.push('Type an annual interest rate to see an EMI.' + range + checked + ' ');
+    }
+    if (loan.rateNeedsReview && loan.lastVerified) {
+      parts.push('The saved rate was last checked on ' + loan.lastVerified + '. Edit it if the bank has moved. ');
+    }
+    if (loan.annualRatePercent != null) {
+      const floatText = loan.floating == null ? 'rate type not on file' : (loan.floating ? 'floating' : 'fixed');
+      parts.push('Loan ₹' + fmt(loan.principalInr) + ', down payment ₹' + fmt(loan.downPaymentInr) + ', ' + loan.annualRatePercent + '% a year, ' + floatText + '. ');
+      parts.push('Tenure ' + loan.tenureMonths + ' months including a ' + loan.moratoriumMonths + '-month moratorium (' + loan.repaymentMonths + ' repayment months). ');
+      parts.push('EMI ₹' + fmt(loan.emiInr) + '. Total repayment ₹' + fmt(loan.totalRepaymentInr) + '. Total interest ₹' + fmt(loan.totalInterestInr) + '. ');
+    }
+    if (est.postSolarBillInr != null) parts.push('Estimated electricity bill after solar ₹' + fmt(est.postSolarBillInr) + '. ');
+    if (est.combinedMonthlyOutflowInr != null && loan.emiInr != null) {
+      parts.push('Combined monthly outflow is the EMI plus that bill: ₹' + fmt(est.combinedMonthlyOutflowInr) + '. ');
+    }
+    parts.push('The subsidy, if it is paid, is credited to the loan account later. It is not taken off the principal here. The bank makes the credit decision. ');
+    if (loan.scheme && loan.scheme.note) parts.push(loan.scheme.note + ' ');
+    if (loan.scheme && loan.scheme.applyUrl) {
+      parts.push(linkEl(loan.scheme.applyUrl, loan.scheme.name || 'Lender page'));
+    }
+    setParts(elements.loanCopy, parts);
+  }
+
+  function renderFlows(est) {
+    const flow = est.flow;
+    const post = est.postSolar || {};
+    const settled = est.settlement || {};
+    setText(elements.flowIntro, 'Solar is used at home first, while the sun is up. Surplus is exported. The home imports when solar falls short. A bidirectional meter records both, and KSEB rules decide the bill. Daytime use here is an assumption (' + Math.round(flow.daytimeFraction * 100) + '% of consumption). ' + (est.wording ? est.wording.caveat : ''));
+    setText(elements.flowSelf, fmtKwh(flow.selfConsumptionKwh) + ' kWh');
+    setText(elements.flowExport, fmtKwh(flow.exportKwh) + ' kWh');
+    setText(elements.flowImport, fmtKwh(flow.importKwh) + ' kWh');
+    setText(elements.flowBalance, 'Physical net import ' + fmtKwh(settled.physicalNetImportKwh) + ' kWh. Billed units after banking ' + fmtKwh(settled.billedUnitsKwh) + ' kWh. Surplus still banked ' + fmtKwh(settled.surplusBankedKwh) + ' kWh.');
+    setText(elements.flowEnergy, inrOrDash(post.energyInr));
+    setText(elements.flowFixed, inrOrDash(post.fixedInr) + (post.gridSupportInr ? ' · grid support ₹' + fmt(post.gridSupportInr) : ''));
+    setText(elements.flowFit, post.fitCreditInr ? '₹' + fmt(post.fitCreditInr) + ' at ₹' + post.fitRate + '/kWh, against the fixed charge' : '₹0');
+
+    if (!elements.flowSixty) return;
+    elements.flowSixty.replaceChildren();
+    (est.illustrative60 || []).forEach(function (row) {
+      const li = document.createElement('li');
+      const billBit = row.billInr == null ? '.' : (row.billInr < 1 ? ', illustrative bill under ₹1.' : ', illustrative bill ₹' + fmt(row.billInr) + '.');
+      li.textContent = row.name + '. ' + row.detail + ' Self ' + fmtKwh(row.selfConsumptionKwh) + ' kWh, export ' + fmtKwh(row.exportKwh) + ' kWh, import ' + fmtKwh(row.importKwh) + ' kWh' + billBit;
+      elements.flowSixty.appendChild(li);
+    });
+  }
+
+  function renderFormula(est) {
+    const gen = est.generation;
+    setText(elements.formulaDaily, est.dcKwp.toFixed(2) + ' kWp × ' + est.yieldKwh + ' = ' + fmtKwh(gen.dailyKwh) + ' kWh');
+    setText(elements.formulaYield, est.yieldKwh.toFixed(1) + ' kWh per kW per day, an estimate');
+    setText(elements.formulaMonth, fmtKwh(gen.dailyKwh) + ' × ' + gen.monthDays + ' = ' + fmtKwh(gen.monthlyKwh) + ' kWh');
+    setText(elements.formulaAnnual, fmtKwh(gen.annualKwh) + ' kWh in ' + gen.year + ', the sum of the months');
+    setText(elements.formulaResult, est.dcKwp.toFixed(2) + ' kWp DC');
+    setText(elements.formulaCo2, (est.co2Tons == null ? '—' : est.co2Tons.toFixed(1) + ' tons / yr'));
+    const extra = (est.warnings || []).slice();
+    if (est.yieldClamped) extra.push('The yield slider was held inside 4 to 6.');
+    setText(elements.formulaNotes, extra.join(' '));
+  }
+
   function renderPanelMatrix(count) {
     if (!elements.panelGrid) return;
-    const wattage = (typeof SOORYAVAMSHI_CONFIG !== 'undefined' && SOORYAVAMSHI_CONFIG.calculator && SOORYAVAMSHI_CONFIG.calculator.standardPanelWattage) || 550;
-    if (elements.panelCountTag) elements.panelCountTag.textContent = `${fmt(count)} x ${wattage}W Modules`;
-
+    const wattage = (lastEst && lastEst.panelWattage) || 550;
+    if (elements.panelCountTag) elements.panelCountTag.textContent = fmt(count) + ' x ' + wattage + 'W Modules';
     elements.panelGrid.innerHTML = '';
-    // Cap visual display at 36 panels for UI cleanliness
     const displayCount = Math.min(count, 36);
     for (let i = 0; i < displayCount; i++) {
       const panel = document.createElement('div');
       panel.className = 'mini-panel-icon';
-      panel.title = `Module #${i + 1}: ${wattage}W Mono PERC Bifacial`;
-      panel.innerHTML = `
-        <div class="mini-panel-cell"></div>
-        <div class="mini-panel-cell"></div>
-        <div class="mini-panel-cell"></div>
-      `;
+      panel.title = 'Module #' + (i + 1) + ': ' + wattage + 'W Mono PERC Bifacial';
+      panel.innerHTML = '<div class="mini-panel-cell"></div><div class="mini-panel-cell"></div><div class="mini-panel-cell"></div>';
       elements.panelGrid.appendChild(panel);
     }
-
     if (count > 36) {
       const moreTag = document.createElement('div');
       moreTag.style.alignSelf = 'center';
       moreTag.style.fontSize = '0.75rem';
       moreTag.style.color = 'rgba(245, 239, 230, 0.75)';
       moreTag.style.fontWeight = '600';
-      moreTag.textContent = `+${fmt(count - 36)} more`;
+      moreTag.textContent = '+' + fmt(count - 36) + ' more';
       elements.panelGrid.appendChild(moreTag);
     }
   }
 
-  /* ---------- Screen reader summary: one short line, once the visitor pauses ---------- */
   function scheduleSummary() {
     if (!elements.summary) return;
     clearTimeout(summaryTimer);
-    summaryTimer = setTimeout(function() {
-      const est = currentEstimate();
-      elements.summary.textContent = `${est.kw} kilowatt system, ${est.panels} panels, yearly savings up to ₹${fmt(est.savings)}.`;
+    summaryTimer = setTimeout(function () {
+      const est = lastEst;
+      if (!est || !est.ok) {
+        elements.summary.textContent = 'Enter a KSEB bill or monthly units to see a Kerala rooftop estimate.';
+        return;
+      }
+      elements.summary.textContent = est.capacityLabel + ', ' + est.panelCount + ' panels. Estimated electricity bill after solar ' + inrOrDash(est.postSolarBillInr) + '. Potential monthly savings ' + inrOrDash(est.monthlySavingsInr) + '.';
     }, 900);
   }
-
-  /* ---------- Booking links and WhatsApp ---------- */
 
   function urlParam(name) {
     try { return new URLSearchParams(window.location.search).get(name) || ''; } catch (e) { return ''; }
   }
 
-  // contact.html?bill=3500&kw=4.6 (or ?units=486&kw=4.6), plus the town and PIN if this page was opened with them.
-  // Never copy what was typed into the form here: these links sit outside the masked form, and Clarity
-  // records link addresses (the privacy page says it doesn't see what visitors type into the form).
   function bookingHref(est) {
     const p = new URLSearchParams();
-    if (est.mode === 'bill') p.set('bill', est.bill); else p.set('units', est.units);
-    p.set('kw', est.kw);
+    if (est && est.ok) {
+      if (isBillMode && est.monthlyBillEntered != null) p.set('bill', String(Math.round(est.monthlyBillEntered)));
+      else p.set('units', String(Math.round(est.monthlyUnits)));
+      p.set('kw', est.dcKwp.toFixed(1));
+      if (est.periodMonths === 2) p.set('period', '2');
+    }
     const loc = urlParam('location');
     const pin = urlParam('pin').replace(/\D/g, '');
     if (loc) p.set('location', loc);
     if (pin) p.set('pin', pin);
-    return 'contact.html?' + p.toString();
+    const q = p.toString();
+    return q ? 'contact.html?' + q : 'contact.html';
   }
 
   function updateBookingLinks(est) {
     if (!ready && !est) return;
-    est = est || currentEstimate();
+    est = est || lastEst;
     const withEstimate = bookingHref(est);
-    document.querySelectorAll(BOOKING_LINKS).forEach(a => {
-      // Until the visitor gives a bill, the header and bar buttons stay plain links to the contact page
+    document.querySelectorAll(BOOKING_LINKS).forEach(function (a) {
       a.setAttribute('href', userSet || a === elements.assessmentBtn ? withEstimate : 'contact.html');
     });
   }
 
   function whatsappText(est) {
-    est = est || currentEstimate();
-    const usage = est.mode === 'bill'
-      ? `Monthly bill: ₹${fmt(est.bill)} (about ${fmt(est.units)} units)`
-      : `Monthly use: ${fmt(est.units)} units (bill about ₹${fmt(est.bill)})`;
-    return [
+    est = est || lastEst;
+    const lines = [
       'Hi, I used the solar calculator on suryavamshi.com.',
-      usage,
-      `Suggested system: ${est.kw} kW, ${est.panels} panels`,
-      'Please help me book a free site visit.'
-    ].join('\n');
+      'Kerala, grid-connected, net-metered, no battery.'
+    ];
+    if (isBillMode && currentBill != null) lines.push('KSEB bill entered: ₹' + fmt(currentBill) + (periodMonths() === 2 ? ' for two months.' : ' for one month.'));
+    else if (!isBillMode && currentUnits != null) lines.push('Consumption entered: ' + fmt(currentUnits) + ' units' + (periodMonths() === 2 ? ' over two months.' : ' a month.'));
+    if (est && est.ok) {
+      lines.push('Suggested system: ' + est.capacityLabel + ', ' + est.dcKwp.toFixed(2) + ' kWp, ' + est.panelCount + ' panels.');
+      if (est.postSolarBillInr != null) lines.push('Estimated electricity bill after solar: ₹' + fmt(est.postSolarBillInr) + ' a month.');
+      if (est.monthlySavingsInr != null) lines.push('Potential monthly savings: ₹' + fmt(est.monthlySavingsInr) + '.');
+      lines.push('Your actual bill depends on KSEB billing rules and usage.');
+    }
+    lines.push('Please arrange a site assessment.');
+    return lines.join('\n');
   }
 
   function whatsappLink(est) {
-    return `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(whatsappText(est))}`;
+    return 'https://wa.me/' + WA_NUMBER + '?text=' + encodeURIComponent(whatsappText(est));
   }
 
-  // The result's WhatsApp button always sends this result; the floating button and the
-  // phone bar's WhatsApp send it once the visitor has given their own bill or units
   function updateWhatsAppLinks(est) {
     const link = whatsappLink(est);
     if (elements.waBtn) elements.waBtn.href = link;
     if (!userSet) return;
-    document.querySelectorAll('.fab-wa, .mobile-bar a.wa').forEach(a => { a.href = link; });
+    document.querySelectorAll('.fab-wa, .mobile-bar a.wa').forEach(function (a) { a.href = link; });
   }
 
-  /* ---------- The form on this page ---------- */
-
   function estimateForForm(est) {
-    est = est || currentEstimate();
-    return { kw: est.kw, panels: est.panels, bill: est.mode === 'bill' ? est.bill : null, units: est.mode === 'units' ? est.units : null };
+    est = est || lastEst;
+    if (!est || !est.ok) return null;
+    return {
+      kw: est.dcKwp.toFixed(1),
+      panels: est.panelCount,
+      bill: isBillMode && est.monthlyBillEntered != null ? Math.round(est.monthlyBillEntered) : null,
+      units: !isBillMode ? Math.round(est.monthlyUnits) : null
+    };
   }
 
   function prefillForm() {
-    const est = currentEstimate();
+    const est = lastEst;
+    if (!est || !est.ok) return;
     const monthlyInput = document.getElementById('client-consumption') || document.getElementById('contactUnits');
     const msgInput = document.getElementById('client-message') || document.getElementById('contactMessage');
+    const formEst = estimateForForm(est);
 
-    if (monthlyInput) {
-      // Carry over whichever the visitor used: their bill, or their units
-      if (window.svSetUsageMode) window.svSetUsageMode(est.mode);
-      monthlyInput.value = est.mode === 'bill' ? est.bill : est.units;
+    if (monthlyInput && formEst) {
+      if (window.svSetUsageMode) window.svSetUsageMode(isBillMode ? 'bill' : 'units');
+      monthlyInput.value = isBillMode ? formEst.bill : formEst.units;
       monthlyInput.dataset.autoValue = String(monthlyInput.value);
     }
 
     if (msgInput) {
-      const usage = est.mode === 'bill'
-        ? `my monthly bill of about ₹${fmt(est.bill)} (about ${fmt(est.units)} units)`
-        : `my monthly use of ${fmt(est.units)} units (a bill of about ₹${fmt(est.bill)})`;
-      const text = `I used the solar calculator: about ${est.kw} kW (${est.panels} panels, about ${fmt(est.results.roofSpaceSqFt)} sq ft of roof) for ${usage}. Please arrange a free site visit.`;
-      // Don't overwrite something the visitor wrote themselves
+      const usage = isBillMode
+        ? 'a KSEB bill of about ₹' + fmt(est.monthlyBillEntered) + ' a month'
+        : 'about ' + fmt(est.monthlyUnits) + ' units a month';
+      const periodBit = est.periodMonths === 2 ? ' The figure entered was a two-month bill, normalised to a month.' : '';
+      const after = est.postSolarBillInr == null ? '' : ' Estimated electricity bill after solar about ₹' + fmt(est.postSolarBillInr) + ' a month.';
+      const save = est.monthlySavingsInr == null ? '' : ' Potential monthly savings about ₹' + fmt(est.monthlySavingsInr) + '.';
+      const text = 'I used the solar calculator for Kerala: grid-connected, net-metered, no battery. Suggested system ' + est.capacityLabel + ' (' + est.dcKwp.toFixed(2) + ' kWp, ' + est.panelCount + ' panels, about ' + fmt(est.roofSqFt) + ' sq ft) for ' + usage + '.' + periodBit + after + save + ' Your actual bill depends on KSEB billing rules and usage. Please arrange a site assessment.';
       if (!msgInput.value.trim() || msgInput.value === msgInput.dataset.autoText) {
         msgInput.value = text;
         msgInput.dataset.autoText = text;
@@ -679,10 +941,9 @@ window.SolarCalculator = (function() {
     }
 
     formPrefilled = true;
-    if (window.svShowEstimate) window.svShowEstimate(estimateForForm(est));
+    if (window.svShowEstimate) window.svShowEstimate(formEst);
   }
 
-  // Land on the form itself (clear of the header) with the name field ready to type in
   function openForm(prefill) {
     if (prefill) prefillForm();
     const form = document.getElementById('assessment-form');
@@ -701,45 +962,46 @@ window.SolarCalculator = (function() {
     openForm(true);
   }
 
-  /* ---------- Arriving with a bill: show the result, not the top of the page ---------- */
   function bringResultIntoView() {
     if (window.location.hash) return;
     const nav = window.performance && performance.getEntriesByType ? performance.getEntriesByType('navigation')[0] : null;
     if (nav && (nav.type === 'reload' || nav.type === 'back_forward')) return;
-    // Phones and tablets stack the result under the inputs, so go to the result itself;
-    // wider screens show both side by side, so go to the top of the calculator card
     const narrow = window.matchMedia && window.matchMedia('(max-width: 980px)').matches;
     const target = document.getElementById(narrow ? 'calc-result' : 'calc-card');
     if (!target) return;
-    // premium.js opens a page at its #hash target (instantly), so name the target in the address
     try { history.replaceState(history.state, '', '#' + target.id); } catch (e) {}
     let touched = false;
-    ['wheel', 'touchstart', 'keydown', 'mousedown'].forEach(function(ev) {
-      window.addEventListener(ev, function() { touched = true; }, { once: true, passive: true });
+    ['wheel', 'touchstart', 'keydown', 'mousedown'].forEach(function (ev) {
+      window.addEventListener(ev, function () { touched = true; }, { once: true, passive: true });
     });
-    const go = function() {
+    const go = function () {
       if (touched) return;
       try { target.scrollIntoView({ block: 'start', behavior: 'instant' }); } catch (e) { target.scrollIntoView(true); }
     };
     go();
-    // Once fonts and images have settled, check it again
-    window.addEventListener('load', function() { setTimeout(function() { requestAnimationFrame(go); }, 0); });
+    window.addEventListener('load', function () { setTimeout(function () { requestAnimationFrame(go); }, 0); });
   }
 
   return {
-    init,
-    compute,
-    getCurrentResults: function() {
-      return compute(Math.round(currentUnits), getSelectedState());
+    init: init,
+    compute: compute,
+    getCurrentResults: function () {
+      return compute(Math.round(currentUnits || 0));
     },
-    // The visitor's estimate for the form's WhatsApp links, or null until they have given a bill or units
-    getEstimate: function() {
+    getEstimate: function () {
       if (!ready || !(userSet || formPrefilled)) return null;
-      const est = currentEstimate();
-      return { kw: est.kw, panels: est.panels, bill: est.bill, units: est.units, mode: est.mode };
+      const formEst = estimateForForm(lastEst);
+      if (!formEst) return null;
+      return {
+        kw: formEst.kw,
+        panels: formEst.panels,
+        bill: formEst.bill,
+        units: lastEst.monthlyUnits,
+        mode: isBillMode ? 'bill' : 'units'
+      };
     },
-    whatsappText: function() { return ready ? whatsappText() : ''; },
-    openForm: function() { openForm(true); },
-    handleAssessmentPrefill
+    whatsappText: function () { return ready ? whatsappText() : ''; },
+    openForm: function () { openForm(true); },
+    handleAssessmentPrefill: handleAssessmentPrefill
   };
 })();
