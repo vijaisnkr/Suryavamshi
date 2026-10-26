@@ -142,19 +142,26 @@
       rawData.kseb_consumer_number = rawData.kseb_consumer_number.replace(/\D/g, "");
       rawData.pin_code = rawData.pin_code.replace(/\D/g, "");
 
-      // Units: what they typed, or estimated from the bill at the same tariff the calculator uses
-      const numericUnits = usage.mode === "bill" ? Math.round(usage.value / getTariff()) : usage.value;
       const monthlyBill = usage.mode === "bill" && usage.value > 0 ? usage.value : null;
 
-      // Estimated system size from this visitor's own usage
+      // Same Kerala net-metering model as the calculator. A rupee bill is not divided by a flat tariff.
       let estCapacity = null;
-      if (numericUnits > 0) {
+      let numericUnits = usage.mode === "units" ? usage.value : null;
+      if (usage.value > 0 && window.SolarModel) {
         try {
-          if (window.SolarCalculator && typeof window.SolarCalculator.compute === "function" && window.SOORYAVAMSHI_CONFIG) {
-            estCapacity = parseFloat(window.SolarCalculator.compute(numericUnits, window.SOORYAVAMSHI_CONFIG.calculator.states[0]).recommendedKw) || null;
+          const est = window.SolarModel.estimate(usage.mode === "bill"
+            ? { monthlyBill: usage.value, unitsAreMeasured: false, residential: true, payment: "cash" }
+            : { monthlyUnits: usage.value, unitsAreMeasured: true, residential: true, payment: "cash" });
+          if (est && est.ok) {
+            estCapacity = est.dcKwp;
+            if (est.monthlyUnits > 0) numericUnits = Math.round(est.monthlyUnits);
           }
         } catch (err) {}
-        if (!estCapacity) estCapacity = Math.max(1.0, Math.round((numericUnits / (30 * 4.2 * 0.82)) * 10) / 10);
+      }
+      if (!estCapacity && numericUnits > 0 && window.SolarCalculator && typeof window.SolarCalculator.compute === "function") {
+        try {
+          estCapacity = parseFloat(window.SolarCalculator.compute(numericUnits).recommendedKw) || null;
+        } catch (err) {}
       }
       rawData.estimated_solar_capacity = estCapacity;
 
@@ -267,18 +274,6 @@
     }
 
     return errors;
-  }
-
-  /**
-   * KSEB tariff used to turn a bill into units (same figure the solar calculator uses)
-   */
-  function getTariff() {
-    try {
-      const st = window.SOORYAVAMSHI_CONFIG.calculator.states[0];
-      return st.defaultTariff || window.SOORYAVAMSHI_CONFIG.calculator.averageTariffPerUnitInr || 7.2;
-    } catch (e) {
-      return 7.2;
-    }
   }
 
   function panelWattage() {

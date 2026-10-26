@@ -50,7 +50,7 @@
     })();
   </script>
 
-  <link rel="stylesheet" href="css/daylight.css?v=13.8">
+  <link rel="stylesheet" href="css/daylight.css?v=14.2">
   <link rel="stylesheet" href="css/sv-select.css?v=1.0">
 
   <script type="application/ld+json">
@@ -200,7 +200,7 @@
       <div class="wrap">
         <nav class="crumbs" aria-label="Breadcrumb"><a href="./">Home</a><span aria-hidden="true">/</span><span aria-current="page">Solar Calculator</span></nav>
         <h1 data-reveal>Solar calculator: how much solar <span class="sun">does your home need?</span></h1>
-        <p class="lede" data-reveal style="--d:1">Enter your monthly units or your electricity bill (up to ₹2,00,000) and get your recommended system size, panels, roof space, inverter and yearly savings.</p>
+        <p class="lede" data-reveal style="--d:1">Enter your KSEB bill or the units on it. The estimate is for grid-connected, net-metered rooftop solar in Kerala, without a battery. It is not a promise that the bill will disappear.</p>
       </div>
     </section>
 
@@ -212,12 +212,12 @@
           <div class="calc-in">
             <div>
               <h2><svg class="ic" aria-hidden="true"><use href="#i-chart"/></svg>Your Home Energy Profile</h2>
-              <p class="muted" style="margin-top:6px">Type your monthly bill or units, or drag the slider. Your result updates as you go.</p>
+              <p class="muted" style="margin-top:6px">Kerala, KSEB, on-grid, no battery. Type a bill or units, or drag the slider.</p>
             </div>
 
             <div class="seg bill" id="calcModeSeg" role="radiogroup" aria-label="Enter your monthly">
-              <button type="button" class="calc-tab-btn active" id="tabBillMode" role="radio" aria-checked="true">Monthly Bill (₹)</button>
-              <button type="button" class="calc-tab-btn" id="tabUnitsMode" role="radio" aria-checked="false" tabindex="-1">Monthly Units (kWh)</button>
+              <button type="button" class="calc-tab-btn active" id="tabBillMode" role="radio" aria-checked="true">Your Current KSEB Bill</button>
+              <button type="button" class="calc-tab-btn" id="tabUnitsMode" role="radio" aria-checked="false" tabindex="-1">Monthly Electricity Consumption</button>
             </div>
 
             <div>
@@ -225,7 +225,7 @@
               <div class="presets" role="group" aria-labelledby="calcPresetsLabel">
                 <button type="button" class="preset-pill" data-units="150" aria-pressed="false">150 Units (1-2 BHK)</button>
                 <button type="button" class="preset-pill" data-units="300" aria-pressed="false">300 Units (2-3 BHK)</button>
-                <button type="button" class="preset-pill active" data-units="400" aria-pressed="true">400 Units (Standard)</button>
+                <button type="button" class="preset-pill" data-units="400" aria-pressed="false">400 Units (Standard)</button>
                 <button type="button" class="preset-pill" data-units="600" aria-pressed="false">600 Units (3+ ACs)</button>
                 <button type="button" class="preset-pill" data-units="1000" aria-pressed="false">1000 Units (Villa)</button>
               </div>
@@ -233,19 +233,98 @@
 
             <div class="field">
               <div class="value-row">
-                <label for="calcUnitsInput" class="calc-field-label">Monthly Electricity Consumption</label>
+                <label for="calcUnitsInput" class="calc-field-label">Your Current KSEB Bill</label>
                 <div class="big-input">
-                  <span class="cur" id="calcCurrency" hidden>₹</span>
-                  <input type="number" id="calcUnitsInput" value="400" min="0" step="1" inputmode="numeric" aria-describedby="calcInputHint">
-                  <span class="unit-tag" id="calcUnitLabel">Units</span>
+                  <span class="cur" id="calcCurrency">₹</span>
+                  <input type="number" id="calcUnitsInput" value="3500" min="0" step="1" inputmode="numeric" aria-describedby="calcInputHint">
+                  <span class="unit-tag" id="calcUnitLabel">/ month</span>
                 </div>
               </div>
-              <div class="input-hint" id="calcInputHint">Type any amount, or drag the slider.</div>
-              <input type="range" id="calcUnitsSlider" class="calc-range-slider" min="0" max="1000" value="330" step="1" aria-label="Monthly bill">
-              <div class="ticks" id="calcTicks" aria-hidden="true"><span>₹360</span><span>₹3.5k</span><span>₹6.8k</span><span>₹10k</span></div>
+              <div class="input-hint" id="calcInputHint">Type any bill up to ₹2,00,000 a month, or drag the slider.</div>
+              <input type="range" id="calcUnitsSlider" class="calc-range-slider" min="0" max="1000" value="330" step="1" aria-label="Your current KSEB bill">
+              <div class="ticks" id="calcTicks" aria-hidden="true"><span>₹200</span><span>₹3.5k</span><span>₹6.7k</span><span>₹10k</span></div>
             </div>
 
-            <p class="calc-region-note"><svg class="ic" aria-hidden="true"><use href="#i-pin"/></svg>Sized for Kerala homes on the KSEB tariff, at about ₹7.20 a unit.</p>
+            <div class="field" id="calcUnitsOptionalWrap">
+              <label for="calcUnitsOptional">Monthly Electricity Consumption <span class="opt">(optional, units on this bill)</span></label>
+              <input type="number" id="calcUnitsOptional" min="0" step="1" inputmode="numeric" placeholder="kWh on the latest bill">
+              <p class="input-hint">If you enter units, the estimate uses them. A rupee amount alone is preliminary, because slabs, fixed charges and duty do not convert to one unit rate.</p>
+            </div>
+
+            <div class="calc-options">
+              <div class="field">
+                <span class="lbl" id="calcPeriodLabel">Billing period of the figure above</span>
+                <div class="choice-chips two" role="radiogroup" aria-labelledby="calcPeriodLabel">
+                  <label class="time-chip"><input type="radio" name="calc-period" value="1" checked><span>One month<small>Monthly bill</small></span></label>
+                  <label class="time-chip"><input type="radio" name="calc-period" value="2"><span>Two months<small>Bimonthly bill</small></span></label>
+                </div>
+                <p class="input-hint">Many KSEB homes are billed every two months today. KSEB typically bills solar prosumers monthly; confirm with your section office. A two-month entry is shown per month below.</p>
+              </div>
+              <div class="field">
+                <span class="lbl" id="calcUseLabel">When you use electricity</span>
+                <div class="choice-chips" role="radiogroup" aria-labelledby="calcUseLabel">
+                  <label class="time-chip"><input type="radio" name="calc-use" value="day"><span>Mostly daytime<small>About 70% in sun hours</small></span></label>
+                  <label class="time-chip"><input type="radio" name="calc-use" value="mixed" checked><span>Mixed<small>About 45% in sun hours</small></span></label>
+                  <label class="time-chip"><input type="radio" name="calc-use" value="night"><span>Mostly night<small>About 25% in sun hours</small></span></label>
+                </div>
+                <p class="input-hint">Solar is used at home first, while the sun is up. This share is an assumption, not a measured load curve.</p>
+              </div>
+              <div class="grid-2">
+                <div class="field"><label for="calcRoof">Shade-free roof <span class="opt">(optional, sq ft)</span></label><input type="number" id="calcRoof" min="0" step="1" inputmode="numeric" placeholder="e.g. 400"></div>
+                <div class="field"><label for="calcLoad">Sanctioned load <span class="opt">(optional, kW)</span></label><input type="number" id="calcLoad" min="0" step="0.1" inputmode="decimal" placeholder="e.g. 5"></div>
+              </div>
+              <div class="field"><label for="calcBudget">Budget <span class="opt">(optional, ₹)</span></label><input type="number" id="calcBudget" min="0" step="1000" inputmode="numeric" placeholder="What you can spend"></div>
+              <div class="field">
+                <label for="calcYield">Estimated yield <span class="opt" id="calcYieldVal">5.0 kWh per kW per day</span></label>
+                <input type="range" id="calcYield" class="calc-range-slider" min="4" max="6" step="0.1" value="5" aria-valuemin="4" aria-valuemax="6" aria-valuenow="5">
+                <p class="input-hint">Kerala planning range, 4 to 6. An estimate, not a site measurement. One setting is used everywhere on this page.</p>
+              </div>
+              <div class="field">
+                <span class="lbl" id="calcConnLabel">Connection</span>
+                <div class="choice-chips two" role="radiogroup" aria-labelledby="calcConnLabel">
+                  <label class="time-chip"><input type="radio" name="calc-connection" value="home" checked><span>Residential home<small>CFA may apply</small></span></label>
+                  <label class="time-chip"><input type="radio" name="calc-connection" value="other"><span>Not a home<small>No automatic CFA</small></span></label>
+                </div>
+              </div>
+              <div class="field">
+                <span class="lbl" id="calcPayLabel">How you would pay</span>
+                <div class="choice-chips two" role="radiogroup" aria-labelledby="calcPayLabel">
+                  <label class="time-chip"><input type="radio" name="calc-pay" value="cash" checked><span>Cash<small>No EMI</small></span></label>
+                  <label class="time-chip"><input type="radio" name="calc-pay" value="loan"><span>Loan<small>Estimate an EMI</small></span></label>
+                </div>
+              </div>
+              <div class="loan-box" id="calcLoanBox" hidden>
+                <div class="field">
+                  <label for="calcScheme">Lender</label>
+                  <select id="calcScheme">
+                    <option value="sbi">SBI Surya Ghar</option>
+                    <option value="central">Central Bank of India</option>
+                    <option value="custom">Enter my own rate</option>
+                  </select>
+                </div>
+                <div class="grid-2">
+                  <div class="field"><label for="calcProjectCost">Project cost (₹)</label><input type="number" id="calcProjectCost" min="0" step="1000" inputmode="numeric"></div>
+                  <div class="field"><label for="calcSubsidyInput">Expected subsidy (₹)</label><input type="number" id="calcSubsidyInput" min="0" step="1000" inputmode="numeric"></div>
+                </div>
+                <div class="grid-2">
+                  <div class="field"><label for="calcDown">Down payment / margin (₹)</label><input type="number" id="calcDown" min="0" step="1000" inputmode="numeric"></div>
+                  <div class="field"><label for="calcRate">Annual interest (%)</label><input type="number" id="calcRate" min="0" step="0.05" inputmode="decimal"></div>
+                </div>
+                <div class="grid-2">
+                  <div class="field">
+                    <label for="calcTenure">Tenure</label>
+                    <div class="tenure-row">
+                      <input type="number" id="calcTenure" min="1" step="1" inputmode="numeric" value="10">
+                      <select id="calcTenureUnit" aria-label="Tenure unit"><option value="years" selected>years</option><option value="months">months</option></select>
+                    </div>
+                  </div>
+                  <div class="field"><label for="calcMoratorium">Moratorium <span class="opt">(months, optional)</span></label><input type="number" id="calcMoratorium" min="0" step="1" inputmode="numeric"></div>
+                </div>
+                <p class="input-hint" id="calcLoanNote"></p>
+              </div>
+            </div>
+
+            <p class="calc-region-note"><svg class="ic" aria-hidden="true"><use href="#i-pin"/></svg>Kerala only. Yield, tariff, subsidy and loan rates sit in one configuration, each with a source and the date it was checked.</p>
 
             <span class="live"><i></i>Live calculations update instantly as you adjust</span>
           </div>
@@ -262,39 +341,79 @@
                 <div class="sunic"><svg class="ic" aria-hidden="true"><use href="#i-sun"/></svg></div>
               </div>
               <div>
-                <h2 class="result-tag">Recommended system capacity</h2>
-                <div class="result-kw" id="resultHeroKw">3.8 kW</div>
-                <p class="result-sub" id="resultHeroSub">For your ₹2,880 monthly bill (about 400 units a month).</p>
+                <h2 class="result-tag">Recommended Solar Capacity</h2>
+                <div class="result-kw" id="resultHeroKw">3 kW</div>
+                <p class="result-sub" id="resultHeroSub">3.30 kWp DC from 6 panels of 550 W. Kerala, on-grid, no battery.</p>
               </div>
             </div>
 
+            <p class="calc-note" id="resultLead"></p>
+
             <div class="metrics">
-              <div class="metric"><span class="mi" aria-hidden="true"><svg class="ic"><use href="#i-bolt"/></svg></span><span class="ml">Daily use</span><span class="mv" id="resultDailyUnits">13.3 kWh</span><span class="ms">a day</span></div>
-              <div class="metric"><span class="mi" aria-hidden="true"><svg class="ic"><use href="#i-clock"/></svg></span><span class="ml">Solar generation</span><span class="mv" id="resultAnnualGen">4,891 kWh</span><span class="ms">a year</span></div>
-              <div class="metric"><span class="mi" aria-hidden="true"><svg class="ic"><use href="#i-grid"/></svg></span><span class="ml">Panels</span><span class="mv" id="resultPanelCount">7 panels</span><span class="ms">550 W each</span></div>
-              <div class="metric"><span class="mi" aria-hidden="true"><svg class="ic"><use href="#i-home"/></svg></span><span class="ml">Roof space</span><span class="mv" id="resultRoofSpace">380 sq ft</span><span class="ms" id="resultRoofNote">about 35 m², free of shade</span></div>
-              <div class="metric"><span class="mi" aria-hidden="true"><svg class="ic"><use href="#i-chip"/></svg></span><span class="ml">Inverter</span><span class="mv" id="resultInverterCap">5 kW</span><span class="ms" id="resultInverterNote">single or three phase</span></div>
-              <div class="metric good"><span class="mi" aria-hidden="true"><svg class="ic"><use href="#i-rupee"/></svg></span><span class="ml">Yearly savings</span><span class="mv" id="resultAnnualSavings">₹31,100</span><span class="ms" id="resultSavingsNote">up to 90% of your ₹34,560 bill</span></div>
+              <div class="metric"><span class="mi" aria-hidden="true"><svg class="ic"><use href="#i-rupee"/></svg></span><span class="ml">Your Current KSEB Bill</span><span class="mv" id="resultCurrentBill">—</span><span class="ms" id="resultCurrentBillNote">per month</span></div>
+              <div class="metric"><span class="mi" aria-hidden="true"><svg class="ic"><use href="#i-bolt"/></svg></span><span class="ml">Monthly Electricity Consumption</span><span class="mv" id="resultMonthlyUnits">—</span><span class="ms" id="resultMonthlyUnitsNote">kWh</span></div>
+              <div class="metric"><span class="mi" aria-hidden="true"><svg class="ic"><use href="#i-sun"/></svg></span><span class="ml">Estimated Solar Generation</span><span class="mv" id="resultGenMonthly">—</span><span class="ms" id="resultGenNote">per 30-day month</span></div>
+              <div class="metric"><span class="mi" aria-hidden="true"><svg class="ic"><use href="#i-meter"/></svg></span><span class="ml">Estimated Electricity Bill After Solar</span><span class="mv" id="resultBillAfter">—</span><span class="ms" id="resultBillAfterNote">same month</span></div>
+              <div class="metric good"><span class="mi" aria-hidden="true"><svg class="ic"><use href="#i-rupee"/></svg></span><span class="ml">Potential Monthly Savings</span><span class="mv" id="resultSavings">—</span><span class="ms" id="resultSavingsNote">current bill minus bill after solar</span></div>
+              <div class="metric"><span class="mi" aria-hidden="true"><svg class="ic"><use href="#i-award"/></svg></span><span class="ml">Government Subsidy (if eligible)</span><span class="mv" id="resultSubsidy">—</span><span class="ms" id="resultSubsidyNote">not guaranteed</span></div>
+              <div class="metric"><span class="mi" aria-hidden="true"><svg class="ic"><use href="#i-calc"/></svg></span><span class="ml">Estimated Loan EMI</span><span class="mv" id="resultEmi">—</span><span class="ms" id="resultEmiNote">cash purchase</span></div>
+              <div class="metric"><span class="mi" aria-hidden="true"><svg class="ic"><use href="#i-grid"/></svg></span><span class="ml">Panels</span><span class="mv" id="resultPanelCount">—</span><span class="ms">550 W each</span></div>
+              <div class="metric"><span class="mi" aria-hidden="true"><svg class="ic"><use href="#i-home"/></svg></span><span class="ml">Roof space</span><span class="mv" id="resultRoofSpace">—</span><span class="ms" id="resultRoofNote">shade-free</span></div>
+              <div class="metric"><span class="mi" aria-hidden="true"><svg class="ic"><use href="#i-chip"/></svg></span><span class="ml">Inverter</span><span class="mv" id="resultInverterCap">—</span><span class="ms" id="resultInverterNote">AC rating</span></div>
             </div>
-            <p class="calc-note">Solar cuts your KSEB bill by up to 90%. Fixed charges and meter rent stay on it.</p>
+
+            <div class="subsidy-block" id="resultSubsidySection">
+              <h3>Government Subsidy — Subject to Eligibility</h3>
+              <p id="resultSubsidyCopy"></p>
+              <p id="resultCostCopy"></p>
+            </div>
+            <div class="subsidy-block" id="resultLoanSection">
+              <h3>Estimated Loan EMI</h3>
+              <p id="resultLoanCopy"></p>
+            </div>
 
             <div class="modules">
-              <div class="row"><span>Modules</span><span class="tagp" id="resultPanelCountTag">7 x 550W Modules</span></div>
+              <div class="row"><span>Modules</span><span class="tagp" id="resultPanelCountTag">6 x 550W Modules</span></div>
               <div class="solar-panel-icons-grid" id="resultPanelGrid" aria-hidden="true"></div>
             </div>
 
-            <details class="formula">
-              <summary>View engineering calculation formula</summary>
+            <details class="formula" id="calcNetDetails">
+              <summary>Net metering, imports and exports</summary>
+              <p id="resultFlowIntro"></p>
               <dl>
-                <dt>Daily consumption</dt><dd id="formulaDaily">13.3 kWh/day</dd>
-                <dt>Peak sun hours</dt><dd id="formulaSunHours">4.3 hrs</dd>
-                <dt>Performance ratio</dt><dd id="formulaDerate">82%</dd>
-                <dt>Daily ÷ (sun hours × ratio)</dt><dd id="formulaResult">3.8 kWp</dd>
+                <dt>Self-consumption</dt><dd id="flowSelf">—</dd>
+                <dt>Export</dt><dd id="flowExport">—</dd>
+                <dt>Import</dt><dd id="flowImport">—</dd>
+                <dt>Estimated net energy balance</dt><dd id="flowBalance">—</dd>
+                <dt>Energy charge on billed units</dt><dd id="flowEnergy">—</dd>
+                <dt>Fixed charge</dt><dd id="flowFixed">—</dd>
+                <dt>Feed-in credit against fixed charges</dt><dd id="flowFit">—</dd>
               </dl>
+              <div class="illust">
+                <h3>Illustrative 60% scenario</h3>
+                <p>A bill could be zero or near zero when household use stays at or below about 60% of the solar generated. That case is the 3 kW example below, and the row “Consumption equal to 60% of generation”. The other rows are different situations: monthly use stays higher, or export and net import are set another way. Those bills do not net to zero. Illustrative only. Not a guarantee. Your actual bill depends on KSEB billing rules and usage. Electricity duty is not included and can remain.</p>
+                <div id="flowExample"></div>
+                <ul id="flowSixty"></ul>
+              </div>
             </details>
 
+            <details class="formula">
+              <summary>How generation and the bill are worked out</summary>
+              <dl>
+                <dt>Daily generation</dt><dd id="formulaDaily">—</dd>
+                <dt>Yield used</dt><dd id="formulaYield">—</dd>
+                <dt>30-day month</dt><dd id="formulaMonth">—</dd>
+                <dt>Annual, sum of months</dt><dd id="formulaAnnual">—</dd>
+                <dt>DC capacity</dt><dd id="formulaResult">—</dd>
+                <dt>CO₂ avoided</dt><dd id="formulaCo2">—</dd>
+              </dl>
+              <p id="formulaNotes"></p>
+            </details>
+
+            <p class="calc-note" id="calcDisclaimer">Estimates depend on consumption, the roof, shade, the tariff, meter readings, KSEB approvals, regulations and financing eligibility. This page does not check live transformer feasibility. Your actual bill depends on KSEB billing rules and usage.</p>
+
             <div class="calc-actions">
-              <a href="contact.html" class="btn btn-sun btn-block" id="calcAssessmentBtn"><svg class="ic" aria-hidden="true"><use href="#i-clip"/></svg>Request Free Site Assessment</a>
+              <a href="contact.html" class="btn btn-sun btn-block" id="calcAssessmentBtn"><svg class="ic" aria-hidden="true"><use href="#i-clip"/></svg>Book a Site Assessment</a>
               <a href="https://wa.me/919061626868" class="btn btn-line btn-block calc-wa" id="calcWhatsAppBtn" target="_blank" rel="noopener"><svg class="ic" aria-hidden="true"><use href="#i-wa"/></svg>Send this estimate on WhatsApp</a>
             </div>
           </div>
@@ -524,14 +643,15 @@
   </div>
 
   <!-- Scripts -->
-  <script src="js/config.js?v=12.3"></script>
-  <script src="js/calculator.js?v=12.6"></script>
+  <script src="js/config.js?v=13.0"></script>
+  <script src="js/solar-model.js?v=1.2"></script>
+  <script src="js/calculator.js?v=14.3"></script>
   <script src="js/app.js?v=12.3"></script>
-  <script src="js/premium.js?v=12.8"></script>
+  <script src="js/premium.js?v=13.0"></script>
   <script src="js/sv-select.js?v=1.0"></script>
   <script src="js/analytics.js?v=1.7"></script>
   <script src="js/supabase-config.js?v=12.0"></script>
   <script src="js/supabase-client.js?v=12.3"></script>
-  <script src="js/contact-form.js?v=13.1"></script>
+  <script src="js/contact-form.js?v=13.2"></script>
 </body>
 </html>

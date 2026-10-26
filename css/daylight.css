@@ -1064,6 +1064,30 @@ html[data-sv-motion="off"] .sample-cover { transition: none; }
 .result-hero h2.result-tag { margin: 0; }
 .metric .ms { font-size: .76rem; line-height: 1.3; color: rgba(244, 247, 251, .66); }
 .calc-note { margin: -6px 0 0; font-size: .82rem; line-height: 1.45; color: rgba(244, 247, 251, .74); }
+.calc-options { display: grid; gap: 16px; }
+.choice-chips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.choice-chips.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.loan-box { display: grid; gap: 12px; padding: 14px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface-2); }
+.loan-box[hidden] { display: none !important; }
+.tenure-row { display: flex; gap: 8px; }
+.tenure-row input { flex: 1; }
+.tenure-row select { width: auto; min-width: 7.5rem; }
+.subsidy-block { display: grid; gap: 8px; }
+.subsidy-block h3 { font-size: 1.02rem; color: #fff; margin: 0; }
+.subsidy-block p, .subsidy-block li { color: rgba(244, 247, 251, .78); font-size: .86rem; margin: 0; }
+.subsidy-block a { color: var(--sun-2); }
+.illust { margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, .12); }
+.illust h3 { font-size: .92rem; color: var(--sun-2); margin: 0 0 6px; }
+.illust ul { margin: 8px 0 0; padding-left: 1.1rem; display: grid; gap: 8px; }
+.illust-kicker { margin: 10px 0 0; font-size: .86rem; font-weight: 650; color: var(--sun-2); }
+.formula .illust-lines { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 6px 0 0; }
+.illust-lines div { display: grid; grid-template-columns: 1fr; gap: 2px; min-width: 0; }
+.formula .illust-lines dt, .formula .illust-lines dd { margin: 0; text-align: left; font-family: inherit; font-weight: 450; color: inherit; }
+.illust-lines dt { font-weight: 650; }
+@media (min-width: 720px) {
+  .illust-lines div { grid-template-columns: minmax(9.5rem, 12.5rem) minmax(0, 1fr); gap: 8px 12px; align-items: baseline; }
+}
+@media (max-width: 560px) { .choice-chips, .choice-chips.two { grid-template-columns: 1fr; } }
 .calc-actions { display: grid; gap: 10px; }
 .calc-out .calc-wa { color: #fff; background: rgba(255, 255, 255, .04); box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .4); }
 .calc-out .calc-wa:hover { box-shadow: inset 0 0 0 1.5px #fff; }
