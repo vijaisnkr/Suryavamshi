@@ -655,7 +655,7 @@ window.SolarCalculator = (function () {
     }
 
     const lead = [];
-    if (est.periodMonths === 2) lead.push('Two-month figure, shown per month. Solar does not change KSEB’s billing period.');
+    if (est.periodMonths === 2) lead.push('Two-month figure, shown per month. ' + (est.billingNote || 'KSEB typically bills solar prosumers monthly; confirm with your section office.'));
     if (est.preliminaryUnits) lead.push('A rupee bill does not map exactly to units. Slabs, fixed charges and duty sit between the amount and the kWh, so this size is preliminary.');
     if (est.siteAssessment) lead.push('A site assessment is recommended.');
     if (est.phase === 'three') lead.push('Above 5 kW DC, the fixed charge uses the three-phase slab.');
@@ -669,7 +669,7 @@ window.SolarCalculator = (function () {
     setText(elements.monthlyUnits, fmtKwh(est.monthlyUnits) + ' kWh');
     setText(elements.monthlyUnitsNote, est.unitsAreMeasured ? 'from the units entered' : 'indicative, from the rupee bill');
     setText(elements.genMonthly, fmtKwh(est.generation.monthlyKwh) + ' kWh');
-    setText(elements.genNote, fmtKwh(est.generation.dailyKwh) + ' kWh a day · 30-day month');
+    setText(elements.genNote, fmtKwh(est.generation.dailyKwh) + ' kWh a day · ' + fmtKwh(est.generation.monthlyKwh * 2) + ' kWh over two months');
     setText(elements.billAfter, billAfterText(est.postSolarBillInr, est.postSolar && est.postSolar.veryLow));
     setText(elements.billAfterNote, est.postSolar && est.postSolar.veryLow
       ? 'Very low on this estimate. It is not guaranteed.'
@@ -694,7 +694,11 @@ window.SolarCalculator = (function () {
     setText(elements.roofSpace, fmt(est.roofSqFt) + ' sq ft');
     setText(elements.roofNote, 'about ' + fmt(est.roofSqM) + ' m², shade-free');
     setText(elements.inverterCap, est.inverter.text);
-    setText(elements.inverterNote, est.inverter.phase);
+    var phaseNote = est.phase === 'three'
+      ? 'three phase, modules above 5 kW DC'
+      : 'single phase, up to 5 kW DC';
+    if (est.inverter.ratio) phaseNote += ' · DC/AC ' + est.inverter.ratio;
+    setText(elements.inverterNote, phaseNote);
 
     renderSubsidy(est);
     renderLoan(est);
@@ -775,16 +779,24 @@ window.SolarCalculator = (function () {
     const flow = est.flow;
     const post = est.postSolar || {};
     const settled = est.settlement || {};
-    setText(elements.flowIntro, 'Solar is used at home first, while the sun is up. Surplus is exported. The home imports when solar falls short. A bidirectional meter records both, and KSEB rules decide the bill. Daytime use here is an assumption (' + Math.round(flow.daytimeFraction * 100) + '% of consumption). ' + (est.wording ? est.wording.caveat : ''));
+    setText(elements.flowIntro, 'Solar is used at home first, while the sun is up. Surplus is exported. The home imports when solar falls short. A bidirectional meter records both, and KSEB rules decide the bill. Daytime use here is an assumption (' + Math.round(flow.daytimeFraction * 100) + '% of consumption). ' + (est.billingNote || '') + ' ' + (est.wording ? est.wording.caveat : ''));
     setText(elements.flowSelf, fmtKwh(flow.selfConsumptionKwh) + ' kWh');
     setText(elements.flowExport, fmtKwh(flow.exportKwh) + ' kWh');
     setText(elements.flowImport, fmtKwh(flow.importKwh) + ' kWh');
-    setText(elements.flowBalance, 'Physical net import ' + fmtKwh(settled.physicalNetImportKwh) + ' kWh. Billed units after banking ' + fmtKwh(settled.billedUnitsKwh) + ' kWh. Surplus still banked ' + fmtKwh(settled.surplusBankedKwh) + ' kWh.');
+    var netKwh = settled.physicalNetImportKwh;
+    var netText = netKwh < -0.05
+      ? 'Net export ' + fmtKwh(-netKwh) + ' kWh'
+      : (netKwh > 0.05 ? 'Net import ' + fmtKwh(netKwh) + ' kWh' : 'Net import and export are about equal');
+    setText(elements.flowBalance, netText + '. Billed units after banking ' + fmtKwh(settled.billedUnitsKwh) + ' kWh. Surplus still banked ' + fmtKwh(settled.surplusBankedKwh) + ' kWh.');
     setText(elements.flowEnergy, inrOrDash(post.energyInr));
     setText(elements.flowFixed, inrOrDash(post.fixedInr) + (post.gridSupportInr ? ' · grid support ₹' + fmt(post.gridSupportInr) : ''));
     setText(elements.flowFit, post.fitCreditInr ? '₹' + fmt(post.fitCreditInr) + ' at ₹' + post.fitRate + '/kWh, against the fixed charge' : '₹0');
 
     if (!elements.flowSixty) return;
+    var example = document.getElementById('flowExample');
+    if (example && est.workedExample) {
+      example.textContent = est.workedExample.half.detail + ' ' + est.workedExample.sixty.detail;
+    }
     elements.flowSixty.replaceChildren();
     (est.illustrative60 || []).forEach(function (row) {
       const li = document.createElement('li');
@@ -796,13 +808,18 @@ window.SolarCalculator = (function () {
 
   function renderFormula(est) {
     const gen = est.generation;
-    setText(elements.formulaDaily, est.dcKwp.toFixed(2) + ' kWp × ' + est.yieldKwh + ' = ' + fmtKwh(gen.dailyKwh) + ' kWh');
+    const modules = est.moduleGeneration || gen;
+    setText(elements.formulaDaily, est.nominalKw + ' kW × ' + est.yieldKwh + ' = ' + fmtKwh(gen.dailyKwh) + ' kWh');
     setText(elements.formulaYield, est.yieldKwh.toFixed(1) + ' kWh per kW per day, an estimate');
-    setText(elements.formulaMonth, fmtKwh(gen.dailyKwh) + ' × ' + gen.monthDays + ' = ' + fmtKwh(gen.monthlyKwh) + ' kWh');
-    setText(elements.formulaAnnual, fmtKwh(gen.annualKwh) + ' kWh in ' + gen.year + ', the sum of the months');
-    setText(elements.formulaResult, est.dcKwp.toFixed(2) + ' kWp DC');
+    setText(elements.formulaMonth, fmtKwh(gen.dailyKwh) + ' × ' + gen.monthDays + ' = ' + fmtKwh(gen.monthlyKwh) + ' kWh · ' + fmtKwh(gen.monthlyKwh * 2) + ' kWh over two months');
+    setText(elements.formulaAnnual, fmtKwh(gen.annualKwh) + ' kWh in ' + gen.year + ', the sum of the months on the sales kW');
+    setText(elements.formulaResult, est.dcKwp.toFixed(2) + ' kWp DC · modules would make ' + fmtKwh(modules.monthlyKwh) + ' kWh in 30 days');
     setText(elements.formulaCo2, (est.co2Tons == null ? '—' : est.co2Tons.toFixed(1) + ' tons / yr'));
     const extra = (est.warnings || []).slice();
+    if (Math.abs(modules.monthlyKwh - gen.monthlyKwh) > 1) {
+      extra.unshift('The bill uses the ' + est.nominalKw + ' kW sales figure (' + fmtKwh(gen.monthlyKwh) + ' kWh in 30 days, ' + fmtKwh(gen.monthlyKwh * 2) + ' kWh over two months). The modules are ' + est.dcKwp.toFixed(2) + ' kWp and would make about ' + fmtKwh(modules.monthlyKwh) + ' kWh in the same 30 days.');
+    }
+    if (est.billingNote) extra.push(est.billingNote);
     if (est.yieldClamped) extra.push('The yield slider was held inside 4 to 6.');
     setText(elements.formulaNotes, extra.join(' '));
   }

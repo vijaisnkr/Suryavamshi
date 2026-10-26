@@ -82,7 +82,10 @@ const SOORYAVAMSHI_CONFIG = {
         bill3KwMaxInr: 3800,
         bill5KwMaxInr: 6000,
         package3Kw: 3,
-        package5Kw: 5
+        package5Kw: 5,
+        // Above Rs 6,000 the raw size is snapped to the nearest of these.
+        // A tie stays on the smaller step. A site assessment is still required.
+        packageStepsKw: [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20]
       },
 
       panelWattage: 550,
@@ -130,8 +133,15 @@ const SOORYAVAMSHI_CONFIG = {
         category: "LT-I Domestic",
         dutyIncluded: false,
         above500EnergyConflict: "Gazette schedule used here: Rs 9.20. One republished copy prints Rs 8.20.",
-        billingCycleNote: "KSERC (5 Dec 2024, OP 18/2023) kept bimonthly billing for consumers below 20 kW. Solar does not switch a home to monthly billing.",
-        billingCycleSourceUrl: "https://dev.erckerala.org/api/storage/orders/DHbrNDrCvxmdGffDdSjHklbBvcbgp7RRxXEdQPSl.pdf",
+        // Checked again 26 Oct 2026 in the 2025 gazette. Regulation 28.2 reads the
+        // generation meter and the net meter on the regular billing cycle. Billing
+        // cycle is defined as the Supply Code period. The regulations do not say
+        // that installing solar switches a bimonthly consumer to a monthly bill.
+        // Grid-support charges are "levied monthly" and banking refers to the
+        // previous month. The sentence shown to customers is the owner's wording.
+        billingCycleNote: "KSERC (Renewable Energy and Related Matters) Regulations, 2025, Regulation 28.2: meter reading follows the regular billing cycle. The regulations do not themselves switch a home from bimonthly to monthly billing. KSEB typically bills solar prosumers monthly; confirm with your section office.",
+        prosumerBillingWording: "KSEB typically bills solar prosumers monthly; confirm with your section office.",
+        billingCycleSourceUrl: "https://dev.erckerala.org/api/storage/final-regulations/BDm5OZBLIuAbHoyTX0xoploDz82DbFy1O6klxxfS.pdf",
         // upTo is monthly units. Telescopic slabs are cumulative; later slabs bill every unit at one rate.
         slabs: [
           { upTo: 50, energy: 3.35, fixedSingle: 50, fixedThree: 130, telescopic: true, label: "0–50" },

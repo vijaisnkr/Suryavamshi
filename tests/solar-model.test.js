@@ -205,15 +205,64 @@ test('panels, DC capacity, inverter and generation use one system', () => {
   assert.equal(r.panelCount, 6);
   assert.equal(r.panelWattage, 550);
   assert.equal(r.dcKwp, 3.3);
-  assert.equal(r.generation.dailyKwh, 3.3 * 5);
-  assert.equal(r.generation.monthlyKwh, 3.3 * 5 * 30);
+  assert.equal(r.nominalKw, 3);
+  assert.equal(r.generation.dailyKwh, 15);
+  assert.equal(r.generation.monthlyKwh, 450);
+  assert.equal(r.generation.monthlyKwh * 2, 900);
+  assert.equal(r.moduleGeneration.dailyKwh, 3.3 * 5);
+  assert.equal(r.moduleGeneration.monthlyKwh, 495);
   assert.equal(r.inverter.kw, 3.3);
+  assert.ok(r.inverter.ratio >= 1 && r.inverter.ratio <= 1.25);
+  assert.equal(r.inverter.phase, 'single phase');
   assert.equal(r.roofSqFt, 330);
   const five = est({ monthlyBill: 6000, unitsAreMeasured: false });
   assert.equal(five.panelCount, 10);
   assert.equal(five.dcKwp, 5.5);
+  assert.equal(five.nominalKw, 5);
+  assert.equal(five.generation.dailyKwh, 25);
+  assert.equal(five.generation.monthlyKwh, 750);
+  assert.equal(five.generation.monthlyKwh * 2, 1500);
   assert.equal(five.inverter.kw, 5);
-  assert.equal(five.generation.dailyKwh, five.dcKwp * five.yieldKwh);
+  assert.equal(five.inverter.phase, 'three phase');
+  assert.ok(five.inverter.ratio >= 1 && five.inverter.ratio <= 1.25);
+});
+
+test('bills above Rs 6,000 round to a package step and the inverter tracks the array', () => {
+  const high = est({ monthlyBill: 8000, unitsAreMeasured: false, residential: true });
+  assert.equal(high.ok, true);
+  assert.equal(high.fixedPackageKw, null);
+  assert.equal(high.siteAssessment, true);
+  assert.equal(high.nominalKw, 6);
+  assert.equal(high.capacityLabel, '6 kW');
+  assert.equal(high.dcKwp, 6.05);
+  assert.equal(high.inverter.kw, 6);
+  assert.equal(high.inverter.phase, 'three phase');
+  assert.ok(high.inverter.ratio >= 1 && high.inverter.ratio <= 1.25);
+  assert.ok(high.inverter.kw < 8);
+});
+
+test('a 3 kW month of 450 units with 225 units used can net the energy and fixed charge to zero', () => {
+  const sample = est({ monthlyBill: 3800, unitsAreMeasured: false, residential: true });
+  const half = sample.workedExample.half;
+  const sixty = sample.workedExample.sixty;
+  assert.equal(half.illustrative, true);
+  assert.equal(half.generationKwh, 450);
+  assert.equal(half.twoMonthGenerationKwh, 900);
+  assert.equal(half.consumptionKwh, 225);
+  assert.equal(half.energyInr, 0);
+  assert.ok(half.fixedInr > 0);
+  assert.ok(half.fitCreditInr + 0.01 >= half.fixedInr);
+  assert.ok(half.billInr < 1);
+  assert.equal(half.couldBeZero, true);
+  assert.equal(half.excludesDuty, true);
+  assert.match(half.detail, /Illustrative only/);
+  assert.match(half.detail, /could be zero or near zero/);
+  assert.match(half.detail, /not a guarantee/);
+  assert.match(half.detail, /duty/i);
+  assert.equal(sixty.consumptionKwh, 270);
+  assert.equal(sixty.share, 0.6);
+  assert.match(sixty.detail, /Illustrative only/);
+  assert.equal(/free electricity/i.test(half.detail + sixty.detail), false);
 });
 
 test('the 60% rows are labelled illustrative and do not replace the main flows', () => {

@@ -279,14 +279,54 @@
     return { panelCount: count, dcKwp: count * watt / 1000, notes: notes, site: site, blocked: count === 0 };
   }
 
+  var INVERTER_SIZES_KW = [3, 3.3, 5, 6, 8, 10, 12, 15, 20];
+
+  /**
+   * AC rating stays inside a DC/AC ratio of about 1.0 to 1.25
+   * (array kWp divided by inverter kW). Prefer the largest standard size
+   * that is not bigger than the array. Above 5 kW DC the connection is
+   * three phase; up to 5 kW DC it stays single phase.
+   */
   function inverterFor(dcKwp) {
-    if (dcKwp <= 3.3) return { kw: 3.3, text: '3.3 kW', phase: 'single phase' };
-    if (dcKwp <= 5.5) return { kw: 5, text: '5 kW', phase: 'single or three phase' };
-    if (dcKwp <= 8.5) return { kw: 8, text: '8 kW', phase: 'three phase' };
-    if (dcKwp <= 11.5) return { kw: 10, text: '10 kW', phase: 'three phase' };
-    if (dcKwp <= 16) return { kw: 15, text: '15 kW', phase: 'three phase' };
-    var kw = Math.ceil(dcKwp);
-    return { kw: kw, text: kw + ' kW', phase: 'three phase' };
+    var inBand = [];
+    var i;
+    for (i = 0; i < INVERTER_SIZES_KW.length; i++) {
+      var size = INVERTER_SIZES_KW[i];
+      var ratioTry = dcKwp / size;
+      if (ratioTry >= 1 - 1e-9 && ratioTry <= 1.25 + 1e-6) inBand.push(size);
+    }
+    var kw;
+    if (inBand.length) {
+      kw = inBand[inBand.length - 1];
+    } else {
+      kw = INVERTER_SIZES_KW[INVERTER_SIZES_KW.length - 1];
+      for (i = 0; i < INVERTER_SIZES_KW.length; i++) {
+        if (dcKwp / INVERTER_SIZES_KW[i] <= 1.25 + 1e-6) { kw = INVERTER_SIZES_KW[i]; break; }
+      }
+    }
+    var ratio = dcKwp / kw;
+    var three = dcKwp > 5 + 1e-9;
+    return {
+      kw: kw,
+      text: (kw % 1 ? kw.toFixed(1) : String(kw)) + ' kW',
+      phase: three ? 'three phase' : 'single phase',
+      ratio: roundTo(ratio, 2)
+    };
+  }
+
+  function packageSteps(a) {
+    return (a && a.sales && a.sales.packageStepsKw) || [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20];
+  }
+
+  function nearestPackageKw(raw, a) {
+    var steps = packageSteps(a);
+    var best = steps[0];
+    var bestDist = Math.abs(raw - best);
+    for (var i = 1; i < steps.length; i++) {
+      var dist = Math.abs(raw - steps[i]);
+      if (dist < bestDist - 1e-9) { best = steps[i]; bestDist = dist; }
+    }
+    return best;
   }
 
   function subsidyFor(dcKwp, residential, sub) {
@@ -564,7 +604,7 @@
         fixedKw = null;
         targetKw = (monthlyUnits / monthDays) / yieldKwh;
         site = true;
-        notes.push('The bill is above Rs ' + sales.bill5KwMaxInr.toLocaleString('en-IN') + '. Capacity is calculated from indicative units, not a fixed package. A site assessment is recommended.');
+        notes.push('The bill is above Rs ' + sales.bill5KwMaxInr.toLocaleString('en-IN') + '. Capacity is calculated from indicative units and rounded to a package step. It is not a fixed 3 kW or 5 kW offer. A site assessment is recommended.');
       } else {
         return { ok: false, notes: ['A bill above Rs 6,000 needs the units, or a tariff schedule that can sketch them.'] };
       }
@@ -572,6 +612,15 @@
       return { ok: false, notes: ['Enter a bill or the units.'] };
     }
 
+    if (fixedKw == null && isNum(targetKw)) {
+      var rawKw = targetKw;
+      var stepped = nearestPackageKw(Math.max(rawKw, a.domesticNetMeterMinKw), a);
+      if (Math.abs(stepped - rawKw) > 0.05) {
+        notes.push('The calculated size is about ' + roundTo(rawKw, 2) + ' kW. It is rounded to ' + stepped + ' kW. A site assessment should confirm the array.');
+      }
+      targetKw = stepped;
+      site = true;
+    }
     if (targetKw < a.domesticNetMeterMinKw) {
       notes.push('Domestic net metering starts at 1 kW in the 2025 KSERC regulations. The suggestion is not taken below that.');
       targetKw = a.domesticNetMeterMinKw;
@@ -579,6 +628,46 @@
       site = true;
     }
     return { ok: true, fixedKw: fixedKw, targetKw: targetKw, site: site, notes: notes };
+  }
+
+  function salesIllustration(yieldKwh, tariff, rules) {
+    function scenario(name, share) {
+      var daily = 3 * yieldKwh;
+      var genKwh = daily * 30;
+      var consumption = genKwh * share;
+      var flow = flows(consumption, genKwh, 0.45);
+      var settled = settle(flow, 3, rules);
+      settled.dcKwp = 3;
+      var post = postSolarCharges(consumption, settled, 'single', tariff, rules);
+      var row = {
+        name: name,
+        illustrative: true,
+        share: share,
+        dailyKwh: daily,
+        generationKwh: genKwh,
+        twoMonthGenerationKwh: genKwh * 2,
+        consumptionKwh: consumption,
+        selfConsumptionKwh: flow.selfConsumptionKwh,
+        exportKwh: flow.exportKwh,
+        importKwh: flow.importKwh,
+        billedUnitsKwh: settled.billedUnitsKwh,
+        energyInr: post.ok ? post.energyInr : null,
+        fixedInr: post.ok ? post.fixedInr : null,
+        fitCreditInr: post.ok ? post.fitCreditInr : null,
+        billInr: post.ok ? post.totalInr : null,
+        excludesDuty: true,
+        couldBeZero: !!(post.ok && post.totalInr < 1)
+      };
+      var billText = row.couldBeZero
+        ? 'The energy charge and the fixed charge net to under Rs 1 after the feed-in credit, so this illustration could be zero or near zero.'
+        : 'The energy-and-fixed total in this illustration is Rs ' + Math.round(row.billInr) + '. It does not net to zero, because the credit does not clear every charge.';
+      row.detail = 'Illustrative only. A 3 kW system at this yield generates about ' + Math.round(genKwh) + ' units a month, about ' + Math.round(genKwh * 2) + ' units over two months. Using ' + Math.round(consumption) + ' units (' + Math.round(share * 100) + '% of generation), with 45% of that use during sun hours. Energy charge Rs ' + Math.round(row.energyInr) + ', fixed charge Rs ' + Math.round(row.fixedInr) + ', feed-in credit Rs ' + Math.round(row.fitCreditInr) + ' against that fixed charge. ' + billText + ' Electricity duty is not included and can remain. This is not a guarantee. Your actual bill depends on KSEB billing rules and usage.';
+      return row;
+    }
+    return {
+      half: scenario('3 kW generating about 450 units, 225 units used', 0.5),
+      sixty: scenario('3 kW with use up to 60% of generation', 0.6)
+    };
   }
 
   function estimate(input, config) {
@@ -680,6 +769,11 @@
     if (capped.panelCount !== sized.panelCount) rec.fixedKw = null;
 
     var dcKwp = capped.dcKwp;
+    var headlineKw = rec.targetKw;
+    if (dcKwp + 1e-6 < headlineKw) {
+      headlineKw = dcKwp;
+      rec.fixedKw = null;
+    }
     if (dcKwp > a.singlePhaseUpToKw + 1e-9) phase = 'three';
     if (dcKwp > a.storageNoteAboveKw + 1e-9) {
       notes.push('Above 10 kW, the 2025 KSERC regulations ask for battery storage on a new domestic net-metered system (10% above 10–15 kW, 20% above 15–20 kW). This estimate is for a system without a battery. From 1 April 2027 the storage rule also reaches systems above 5 kW.');
@@ -689,7 +783,8 @@
       site = true;
     }
 
-    var gen = generation(dcKwp, yieldKwh, { days: a.displayMonthDays, year: a.calendarYear });
+    var gen = generation(headlineKw, yieldKwh, { days: a.displayMonthDays, year: a.calendarYear });
+    var moduleGen = generation(dcKwp, yieldKwh, { days: a.displayMonthDays, year: a.calendarYear });
     var monthUnits = isNum(units) ? units : 0;
     var flow = flows(monthUnits, gen.monthlyKwh, pattern.daytimeFraction);
     var settled = settle(flow, dcKwp, a.netMetering);
@@ -797,7 +892,10 @@
       currentBillInr: currentBillInr,
       currentBillSource: currentBillSource,
       fixedPackageKw: rec.fixedKw,
-      capacityLabel: rec.fixedKw ? (rec.fixedKw + ' kW') : (roundTo(dcKwp, 2) + ' kWp'),
+      nominalKw: headlineKw,
+      capacityLabel: (rec.fixedKw || packageSteps(a).some(function (step) { return Math.abs(step - headlineKw) < 1e-6; }))
+        ? ((headlineKw % 1 ? roundTo(headlineKw, 1) : headlineKw) + ' kW')
+        : (roundTo(dcKwp, 2) + ' kWp'),
       dcKwp: dcKwp,
       panelCount: capped.panelCount,
       panelWattage: a.panelWattage,
@@ -810,6 +908,9 @@
       yieldIsEstimate: true,
       usagePattern: pattern,
       generation: gen,
+      moduleGeneration: moduleGen,
+      workedExample: salesIllustration(yieldKwh, tariff, a.netMetering),
+      billingNote: (a.tariff && a.tariff.prosumerBillingWording) || 'KSEB typically bills solar prosumers monthly; confirm with your section office.',
       flow: flow,
       settlement: settled,
       postSolar: post,
