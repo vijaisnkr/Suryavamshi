@@ -239,6 +239,10 @@ test('bills above Rs 6,000 round to a package step and the inverter tracks the a
   assert.equal(high.inverter.phase, 'three phase');
   assert.ok(high.inverter.ratio >= 1 && high.inverter.ratio <= 1.25);
   assert.ok(high.inverter.kw < 8);
+  assert.equal(high.workedExample.systemKw, 3);
+  assert.equal(high.workedExample.half.generationKwh, 450);
+  assert.equal(high.workedExample.half.consumptionKwh, 225);
+  assert.match(high.workedExample.label, /Example: 3 kW system/);
 });
 
 test('a 3 kW month of 450 units with 225 units used can net the energy and fixed charge to zero', () => {
@@ -255,14 +259,22 @@ test('a 3 kW month of 450 units with 225 units used can net the energy and fixed
   assert.ok(half.billInr < 1);
   assert.equal(half.couldBeZero, true);
   assert.equal(half.excludesDuty, true);
-  assert.match(half.detail, /Illustrative only/);
-  assert.match(half.detail, /could be zero or near zero/);
-  assert.match(half.detail, /not a guarantee/);
-  assert.match(half.detail, /duty/i);
+  assert.equal(sample.workedExample.systemKw, 3);
+  assert.match(sample.workedExample.label, /Example: 3 kW system/);
+  assert.match(sample.workedExample.disclaimer, /Illustrative only/);
+  assert.match(sample.workedExample.disclaimer, /Not a guarantee/);
+  assert.match(sample.workedExample.disclaimer, /duty/i);
+  assert.equal(/not a guarantee/i.test(half.line + sixty.line), false);
+  assert.match(half.line, /225/);
+  assert.match(half.line, /fixed Rs 160/);
+  assert.match(half.line, /credit Rs 160/);
+  assert.match(half.line, /bill Rs 0 before duty/);
   assert.equal(sixty.consumptionKwh, 270);
   assert.equal(sixty.share, 0.6);
-  assert.match(sixty.detail, /Illustrative only/);
-  assert.equal(/free electricity/i.test(half.detail + sixty.detail), false);
+  assert.match(sixty.line, /270/);
+  assert.match(sixty.line, /fixed Rs 220/);
+  assert.match(sixty.line, /bill Rs 0 before duty/);
+  assert.equal(/free electricity/i.test(half.line + sixty.line + sample.workedExample.disclaimer), false);
 });
 
 test('the 60% rows are labelled illustrative and do not replace the main flows', () => {

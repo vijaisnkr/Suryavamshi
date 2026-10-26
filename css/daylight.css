@@ -1079,6 +1079,14 @@ html[data-sv-motion="off"] .sample-cover { transition: none; }
 .illust { margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, .12); }
 .illust h3 { font-size: .92rem; color: var(--sun-2); margin: 0 0 6px; }
 .illust ul { margin: 8px 0 0; padding-left: 1.1rem; display: grid; gap: 8px; }
+.illust-kicker { margin: 10px 0 0; font-size: .86rem; font-weight: 650; color: var(--sun-2); }
+.formula .illust-lines { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 6px 0 0; }
+.illust-lines div { display: grid; grid-template-columns: 1fr; gap: 2px; min-width: 0; }
+.formula .illust-lines dt, .formula .illust-lines dd { margin: 0; text-align: left; font-family: inherit; font-weight: 450; color: inherit; }
+.illust-lines dt { font-weight: 650; }
+@media (min-width: 720px) {
+  .illust-lines div { grid-template-columns: minmax(9.5rem, 12.5rem) minmax(0, 1fr); gap: 8px 12px; align-items: baseline; }
+}
 @media (max-width: 560px) { .choice-chips, .choice-chips.two { grid-template-columns: 1fr; } }
 .calc-actions { display: grid; gap: 10px; }
 .calc-out .calc-wa { color: #fff; background: rgba(255, 255, 255, .04); box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .4); }

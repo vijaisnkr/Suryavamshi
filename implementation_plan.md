@@ -173,7 +173,9 @@ When import minus export is negative, the net-metering line says “Net export�
 - Energy-and-fixed total Rs 0. Electricity duty is not in the model and can remain on a real bill
 - Labelled illustrative. Wording is “could be zero or near zero”, then “This is not a guarantee. Your actual bill depends on KSEB billing rules and usage.”
 
-The 60% companion (270 kWh used) also nets the energy charge and the fixed charge to Rs 0: energy Rs 0, fixed charge Rs 220, feed-in credit Rs 220, duty still excluded, same disclaimer. The visitor’s own estimate is separate. A household using more than this illustration, such as 400 units against 450 generated, still has a fixed charge the credit does not fully clear (about Rs 229 in that example).
+The 60% companion (270 kWh used) also nets the energy charge and the fixed charge to Rs 0: energy Rs 0, fixed charge Rs 220, feed-in credit Rs 220, duty still excluded. The visitor’s own estimate is separate. A household using more than this illustration, such as 400 units against 450 generated, still has a fixed charge the credit does not fully clear (about Rs 229 in that example).
+
+The section intro names that low-use case only. The rows “60% of production exported” and “Net import near zero” are different situations and keep their non-zero bills. On a Rs 3,500 bill those two rows are about Rs 229 and Rs 409. The worked example stays a labelled “Example: 3 kW system” even when the suggestion is 6 kW. It is two short lines (225 units and 270 units). “Illustrative only. Not a guarantee.” is said once in the section intro.
 
 Tests added: the 450/225 example (generation, two-month total, fixed charge covered, duty excluded, not a guarantee); 3 kW headline 450 and 900, and 5 kW headline 750 and 1,500, with module generation still 495 for 3.30 kWp; inverter ratio and phase; Rs 8,000 rounded to 6 kW with a 6 kW inverter. `node --test tests/solar-model.test.js`: 14 passed, 0 failed.
 

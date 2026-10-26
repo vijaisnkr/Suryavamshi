@@ -515,28 +515,28 @@
     return [
       pack(
         '60% of production self-consumed',
-        'Illustrative only. Self-use is set to 60% of generation, capped at your consumption. The result above does not use this.',
+        'Illustrative only. Monthly use stays as in the estimate. Only the self-use share changes. This is not the low-use case.',
         consumptionKwh,
         self60,
         genKwh - self60
       ),
       pack(
         '60% of production exported',
-        'Illustrative only. Export is set to 60% of generation. This is not the main estimate.',
+        'Illustrative only. Monthly use stays as in the estimate, and export is set to 60% of generation. This situation does not net to zero.',
         consumptionKwh,
         selfWhenExport60,
         genKwh - selfWhenExport60
       ),
       pack(
         'Consumption equal to 60% of generation',
-        'Illustrative only. Your monthly use is replaced by 60% of generation for this row.',
+        'Illustrative only. Monthly use is set to 60% of generation. This is the low-use case.',
         use60,
         selfWhenUse60,
         genKwh - selfWhenUse60
       ),
       pack(
         'Net import near zero',
-        'Illustrative only. Consumption is set equal to generation, so physical import equals physical export. Banking factors can still leave a charge.',
+        'Illustrative only. Monthly use is set equal to generation, so physical import equals physical export. This situation does not net to zero. Banking can still leave a charge.',
         genKwh,
         selfBalanced,
         genKwh - selfBalanced
@@ -659,14 +659,22 @@
         couldBeZero: !!(post.ok && post.totalInr < 1)
       };
       var billText = row.couldBeZero
-        ? 'The energy charge and the fixed charge net to under Rs 1 after the feed-in credit, so this illustration could be zero or near zero.'
-        : 'The energy-and-fixed total in this illustration is Rs ' + Math.round(row.billInr) + '. It does not net to zero, because the credit does not clear every charge.';
-      row.detail = 'Illustrative only. A 3 kW system at this yield generates about ' + Math.round(genKwh) + ' units a month, about ' + Math.round(genKwh * 2) + ' units over two months. Using ' + Math.round(consumption) + ' units (' + Math.round(share * 100) + '% of generation), with 45% of that use during sun hours. Energy charge Rs ' + Math.round(row.energyInr) + ', fixed charge Rs ' + Math.round(row.fixedInr) + ', feed-in credit Rs ' + Math.round(row.fitCreditInr) + ' against that fixed charge. ' + billText + ' Electricity duty is not included and can remain. This is not a guarantee. Your actual bill depends on KSEB billing rules and usage.';
+        ? 'bill Rs 0 before duty'
+        : 'bill Rs ' + Math.round(row.billInr) + ' before duty';
+      row.line = 'Use ' + Math.round(consumption) + ' units (' + Math.round(share * 100) + '%). Energy Rs ' + Math.round(row.energyInr) + ', fixed Rs ' + Math.round(row.fixedInr) + ', credit Rs ' + Math.round(row.fitCreditInr) + ', ' + billText + '.';
+      row.detail = row.line;
       return row;
     }
+    var half = scenario('3 kW, 50% of generation used', 0.5);
+    var sixty = scenario('3 kW, 60% of generation used', 0.6);
     return {
-      half: scenario('3 kW generating about 450 units, 225 units used', 0.5),
-      sixty: scenario('3 kW with use up to 60% of generation', 0.6)
+      systemKw: 3,
+      label: 'Example: 3 kW system',
+      generationKwh: half.generationKwh,
+      twoMonthGenerationKwh: half.twoMonthGenerationKwh,
+      disclaimer: 'Illustrative only. Not a guarantee. Your actual bill depends on KSEB billing rules and usage. Electricity duty is not included and can remain.',
+      half: half,
+      sixty: sixty
     };
   }
 

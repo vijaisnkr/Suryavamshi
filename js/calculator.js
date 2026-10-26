@@ -625,6 +625,8 @@ window.SolarCalculator = (function () {
     setText(elements.heroKw, '—');
     setText(elements.heroKwSub, 'Kerala, on-grid, no battery. Enter a bill or the units on it.');
     if (elements.flowSixty) elements.flowSixty.replaceChildren();
+    var exampleBox = document.getElementById('flowExample');
+    if (exampleBox) exampleBox.replaceChildren();
     setParts(elements.subsidyCopy, []);
     setParts(elements.costCopy, []);
     setParts(elements.loanCopy, []);
@@ -793,10 +795,7 @@ window.SolarCalculator = (function () {
     setText(elements.flowFit, post.fitCreditInr ? '₹' + fmt(post.fitCreditInr) + ' at ₹' + post.fitRate + '/kWh, against the fixed charge' : '₹0');
 
     if (!elements.flowSixty) return;
-    var example = document.getElementById('flowExample');
-    if (example && est.workedExample) {
-      example.textContent = est.workedExample.half.detail + ' ' + est.workedExample.sixty.detail;
-    }
+    renderWorkedExample(est);
     elements.flowSixty.replaceChildren();
     (est.illustrative60 || []).forEach(function (row) {
       const li = document.createElement('li');
@@ -804,6 +803,32 @@ window.SolarCalculator = (function () {
       li.textContent = row.name + '. ' + row.detail + ' Self ' + fmtKwh(row.selfConsumptionKwh) + ' kWh, export ' + fmtKwh(row.exportKwh) + ' kWh, import ' + fmtKwh(row.importKwh) + ' kWh' + billBit;
       elements.flowSixty.appendChild(li);
     });
+  }
+
+  function renderWorkedExample(est) {
+    var example = document.getElementById('flowExample');
+    if (!example) return;
+    example.replaceChildren();
+    var ex = est.workedExample;
+    if (!ex || !ex.half || !ex.sixty) return;
+    var kicker = document.createElement('p');
+    kicker.className = 'illust-kicker';
+    kicker.textContent = (ex.label || 'Example: 3 kW system') + ' · about ' + fmtKwh(ex.generationKwh) + ' units a month · ' + fmtKwh(ex.twoMonthGenerationKwh) + ' over two months';
+    var list = document.createElement('dl');
+    list.className = 'illust-lines';
+    [ex.half, ex.sixty].forEach(function (row) {
+      var wrap = document.createElement('div');
+      var dt = document.createElement('dt');
+      var dd = document.createElement('dd');
+      dt.textContent = 'Use ' + fmtKwh(row.consumptionKwh) + ' units (' + Math.round(row.share * 100) + '%)';
+      var bill = row.billInr == null ? '—' : (row.couldBeZero ? 'bill Rs 0 before duty' : 'bill Rs ' + fmt(row.billInr) + ' before duty');
+      dd.textContent = 'Energy Rs ' + fmt(row.energyInr) + ', fixed Rs ' + fmt(row.fixedInr) + ', credit Rs ' + fmt(row.fitCreditInr) + ', ' + bill + '.';
+      wrap.appendChild(dt);
+      wrap.appendChild(dd);
+      list.appendChild(wrap);
+    });
+    example.appendChild(kicker);
+    example.appendChild(list);
   }
 
   function renderFormula(est) {
